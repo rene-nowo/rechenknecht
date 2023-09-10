@@ -1,0 +1,24 @@
+{
+    "eps":[0],
+    "book_value":[1],
+    "dividends":[2, ["us-gaap:CommonStockDividendsPerShareDeclared"]],
+    "roa":[3],
+    "ebit_margin":[4],
+    "own_capital_quote":[5],
+    "stockholders_equity":[6, ["us-gaap:StockholdersEquity", "us-gaap:StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"]],
+    "current_assets":[7,["us-gaap:AssetsCurrent"]],
+    "current_liabilities":[8,["us-gaap:LiabilitiesCurrent"]],
+    "current_liquidities":[9],
+    "longterm_liabilities":[10, ["us-gaap:LongTermDebt", "us-gaap:LiabilitiesNoncurrent"]],
+    "total_liabilities":[99, ["us-gaap:Liabilities"]],
+    "total_equity":[11, ["us-gaap:LiabilitiesAndStockholdersEquity"]],
+    "revenue":[12,[
+        "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "us-gaap:Revenues"
+        ]],
+    "ebit":[13,["us-gaap:OperatingIncomeLoss"]],
+    "interest_expense":[14,["us-gaap:InterestExpense","us-gaap:InterestIncomeExpenseNonoperatingNet"]],
+    "net_income":[15,["us-gaap:NetIncomeLoss"]],
+    "tier":[16],
+    "shares":[17, ["us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding","dei:EntityCommonStockSharesOutstanding"]]
+}
