@@ -12,7 +12,7 @@ edgar = EDGAR_API()
 def search_edgar_data(ticker: str):
     # first get all documents (form 10-K) from last years and safe them in a proper folder
     data = edgar.get_all_data(ticker)
-    if data != None:
+    if data is not None:
         branche = data["sicDescription"]
         name = data["name"]
 
@@ -43,7 +43,7 @@ def search_edgar_data(ticker: str):
 def analyze_company(ticker):
     file_list, name, industry = search_edgar_data(ticker)
 
-    if file_list != None:
+    if file_list is not None:
         rechner = Rechenknecht(name, "", "USD", ticker, industry)
         # rechner = Rechenknecht(ticker)
         rechner.set_report_date(file_list[0][1])
@@ -80,7 +80,7 @@ def analyze_company(ticker):
             rechner.set_balance_sheet_data()
             rechner.calculate_returns(year)
 
-            if rechner.is_last_file == True:
+            if rechner.is_last_file:
                 year = int(year) - 1
                 # you can not append this year, because the number of shares is not
                 rechner.calculated_years.append(year)
@@ -115,11 +115,13 @@ if __name__ == "__main__":
     parser.add_argument("--all", help="Analyze all companies", required=False, action="store_true")
     args = parser.parse_args()
 
+    ticker_map: str = "./ticker-cik_map.txt"
+
     if args.ticker:
         analyze_company(args.ticker)
     elif args.all:
         df = pd.read_csv(
-            "./ticker-cik_map.txt",
+            ticker_map,
             names=["Ticker", "CIK", "ANALYSED_RESULT"],
             header=None,
             sep="\t",
