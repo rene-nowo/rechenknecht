@@ -573,32 +573,32 @@ class Rechenknecht:
         roa_average = 0
         dividends_average = 0
         ebit_average = 0
-        own_capital_average = 0
+        equity_ratio_average = 0
 
         for year in self.calculated_years:
             eps_average += self.df[str(year)][0]
             dividends_average += self.df[str(year)][2]
             roa_average += self.df[str(year)][3]
             ebit_average += self.df[str(year)][4]
-            own_capital_average += self.df[str(year)][5]
+            equity_ratio_average += self.df[str(year)][5]
 
         eps_average = eps_average / years_total
         dividends_average = dividends_average / years_total
         roa_average = roa_average / years_total
         ebit_average = ebit_average / years_total
-        own_capital_average = own_capital_average / years_total
+        equity_ratio_average = equity_ratio_average / years_total
 
         logging.debug("EPS Average: " + str(eps_average))
         logging.debug("Dividends Average: " + str(dividends_average))
         logging.debug("ROA Average: " + str(roa_average))
         logging.debug("EBIT Average: " + str(ebit_average))
-        logging.debug("Own capital Average: " + str(own_capital_average))
+        logging.debug("Own capital Average: " + str(equity_ratio_average))
 
         self.df.at[0, "Averages"] = eps_average
         self.df.at[2, "Averages"] = dividends_average
         self.df.at[3, "Averages"] = roa_average
         self.df.at[4, "Averages"] = ebit_average
-        self.df.at[5, "Averages"] = own_capital_average
+        self.df.at[5, "Averages"] = equity_ratio_average
 
         self.df.at[0, "Current Price"] = self.market_price
         self.df.at[0, "ROI in %"] = (eps_average / self.market_price) * 100
