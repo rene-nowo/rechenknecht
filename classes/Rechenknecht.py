@@ -1,4 +1,5 @@
 import logging
+import pathlib
 from xmlrpc.client import Boolean
 import pandas as pd
 import xml
@@ -9,6 +10,7 @@ import json
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import math
+
 
 class Rechenknecht:
     df = pd.DataFrame(
@@ -47,8 +49,21 @@ class Rechenknecht:
     with open("./documents/rechenknecht_index_map.json", "r") as f:
         index_map = json.load(f)
 
-
     def __init__(self, name, isin, currency, ticker: str, sector):
+
+        # Values that are calculated later on
+        self.total_stockholders_equity = None
+        self.liabilities = None
+        self.total_liabilities_and_equity = None
+        self.current_assets = None
+        self.assets = None
+        self.bs_data = None
+        self.market_price = None
+        self.year = None
+        self.report_date = None
+        self.current_year = None
+
+        # initial field values to work with.
         self.name = name
         self.isin = isin
         self.currency = currency
@@ -62,18 +77,18 @@ class Rechenknecht:
     def set_document(self, file_path):
         # die datei einlesen und in beautifulsoup format bringen zur analyse
         with open(
-            file_path,
-            "r",
+                file_path,
+                "r",
         ) as f:
             data = f.read()
         document = BeautifulSoup(data, "xml")
         self.bs_data = document
 
     def get_stock_price(self):
-        stock_info = yf.Ticker(self.ticker)        
+        stock_info = yf.Ticker(self.ticker)
         self.market_price = stock_info.fast_info["lastPrice"]
 
-        #self.isin = stock_info.isin
+        # self.isin = stock_info.isin
 
     def set_report_date(self, report_date):
         self.report_date = report_date
@@ -130,16 +145,16 @@ class Rechenknecht:
         )
 
     def save_balance_sheet_data(
-        self,
-        total_stockholders_equities: list,
-        current_assets: list,
-        current_liabilities: list,
-        longterm_liabilities: list,
-        total_equities: list,
+            self,
+            total_stockholders_equities: list,
+            current_assets: list,
+            current_liabilities: list,
+            longterm_liabilities: list,
+            total_equities: list,
     ):
 
         # wenn es die letzte Datei ist, dann nimm alle Werte um auch die vorherigen Jahre zu speichern
-        if self.is_last_file == True:
+        if self.is_last_file:
             keys_data = [
                 total_stockholders_equities,
                 current_assets,
@@ -239,7 +254,7 @@ class Rechenknecht:
 
     def set_key_value(self, key, possible_tags):
         results = []
-        #print(key)
+        # print(key)
         for tag in possible_tags:
             tag_data = self.bs_data.find_all(tag)
             # wenn es keine ergebnisse gibt gar nicht checken
@@ -261,13 +276,12 @@ class Rechenknecht:
                             )
                         context_id = data["contextRef"]
 
-                        #print(context_id)
+                        # print(context_id)
                         # hier wird geprüft zu welchem Zeitraum diese Zahl gehört, damit man die Zahl auch zeitlich zuordnen kann
                         year, is_full_year = self.get_context_date(context_id)
-                        
-                        
+
                         if is_full_year:
-                            if ((key, year, tag_value) in results) == False:  
+                            if not ((key, year, tag_value) in results):
                                 results.append((key, year, tag_value))
 
         if len(results) == 0:
@@ -289,10 +303,10 @@ class Rechenknecht:
         end = datetime.strptime(end_date, "%Y-%m-%d")
 
         diff = end - start
-        
+
         if diff.days > 350 and (int(end_date.split("-")[0]) == int(self.current_year)):
             return True
-        
+
         return False
 
     def get_context_date(self, context_id):
@@ -314,10 +328,8 @@ class Rechenknecht:
 
             year = end_date.split("-")[0]
 
-            
-
             return year, is_full_year
-        
+
         return None, None
 
     def save_value_in_dataframe(self, key, year, value):
@@ -367,15 +379,15 @@ class Rechenknecht:
         )
 
     def save_statemens_of_operations(
-        self,
-        revenues: list,
-        ebits: list,
-        interest_expenses: list,
-        net_incomes: list,
+            self,
+            revenues: list,
+            ebits: list,
+            interest_expenses: list,
+            net_incomes: list,
     ):
         # wenn es die letzte Datei ist, dann nimm alle Werte um auch die vorherigen Jahre zu speichern
-        #print("Aktuelles Jahr: ", self.current_year)
-        #print("Letzte Datei: ", self.is_last_file)
+        # print("Aktuelles Jahr: ", self.current_year)
+        # print("Letzte Datei: ", self.is_last_file)
         if self.is_last_file == True:
             keys_data = [revenues, ebits, interest_expenses, net_incomes]
             for key_data in keys_data:
@@ -405,7 +417,7 @@ class Rechenknecht:
         key = "shares"
         tag = "dei:EntityCommonStockSharesOutstanding"
         shares = self.bs_data.find(tag)
-        if shares == None:
+        if shares is None:
             tag = "us-gaap:CommonStockSharesOutstanding"
             shares = self.bs_data.find(tag).text
         else:
@@ -413,7 +425,7 @@ class Rechenknecht:
         self.save_number_of_shares(float(shares))
 
     def save_number_of_shares(self, shares):
-        #print("Number of Shares: ", shares)
+        # print("Number of Shares: ", shares)
         self.shares = shares
 
         self.df.at[17, str(self.current_year)] = float(shares)
@@ -426,7 +438,7 @@ class Rechenknecht:
         # wenn es die letzte Datei ist, dann nimm alle Werte um auch die vorherigen Jahre zu speichern
         # print("Aktuelles Jahr: ", self.current_year)
         # print("Letzte Datei: ", self.is_last_file)
-        if self.is_last_file == True:
+        if self.is_last_file:
             keys_data = [dividends]
             for key_data in keys_data:
                 for tupel in key_data:
@@ -445,49 +457,22 @@ class Rechenknecht:
         while i < 16:
             value = self.df[year][i]
 
-            if value == None:
+            if value is None:
                 return False
 
             i += 1
 
         return True
 
-    def calculate_returns(self, year):
+    def calculate_returns(self, year: int):
         # print("Year Complete? ", self.is_year_complete(year), year)
-
-        # wir nehmen die anzahl der shares vom aktuellsten jahr um hier das verhältnis des buchwertes und des eps auf das heutige niveau zu ziehen
-        number_of_shares = self.df[self.latest_year][17]
-        # hier einbauen if year_is_complete() == True:
-        # net_income / shares
-        earnings_per_share = self.df[year][15] / number_of_shares
-        self.save_value_in_dataframe("eps", year, earnings_per_share)
-
-        # stockholders equity / shares
-        book_value_per_share = self.df[year][6] / number_of_shares
-        self.save_value_in_dataframe("book_value", year, book_value_per_share)
-
-        # net income / total equity *100 -> für % anzeige
-        return_on_assets = (self.df[year][15] / self.df[year][11]) * 100
-        self.save_value_in_dataframe("roa", year, return_on_assets)
-
-        # ebit / revenue * 100 -> für % anzeige
-        ebit_margin = (self.df[year][13] / self.df[year][12]) * 100
-        self.save_value_in_dataframe("ebit_margin", year, ebit_margin)
-
-        # stockholder equity / total_equiity * 100 -> für %
-        own_capital_quote = (self.df[year][6] / self.df[year][11]) * 100
-        self.save_value_in_dataframe("own_capital_quote", year, own_capital_quote)
-
-        # current assets - current liabilities
-        current_liquidity = self.df[year][7] - self.df[year][8]
-        self.save_value_in_dataframe("current_liquidities", year, current_liquidity)
-
-        # interest expense
-        if self.df[year][14] == 0:
-            self.df[year][16] = 100
-        else:
-            # ebit / interest_expense -> wie lange kann das unternehmen die aktuellen Schulden von den Einnahmen zurückzahlen?
-            self.df[year][16] = self.df[year][12] / self.df[year][14]
+        self.calculate_EPS_and_number_of_shares(year=year)
+        self.calculate_book_value_per_share(year=year)
+        self.calculate_RoA(year=year)
+        self.calculate_EBIT_margin(year=year)
+        self.calculate_equity_ratio(year=year)
+        self.calculate_current_liquidities(year=year)
+        self.calculate_interest_expense(year=year)
 
         # self.df.at[0, str(self.current_year)] = self.earnings_per_share
         # self.df.at[1, str(self.current_year)] = self.book_value_per_share
@@ -496,6 +481,49 @@ class Rechenknecht:
         # self.df.at[5, str(self.current_year)] = self.own_capital_quote
         # self.df.at[9, str(self.current_year)] = self.own_capital_quote
         # self.df.at[16, str(self.current_year)] = self.tier
+
+    def calculate_interest_expense(self, year: int):
+        # interest expense
+        if self.df[year][14] == 0:
+            self.df[year][16] = 100
+        else:
+            # ebit / interest_expense -> wie lange kann das unternehmen die aktuellen Schulden von den Einnahmen zurückzahlen?
+            self.df[year][16] = self.df[year][12] / self.df[year][14]
+
+    def calculate_current_liquidities(self, year: int):
+        # current assets - current liabilities
+        current_liquidity = self.df[year][7] - self.df[year][8]
+        self.save_value_in_dataframe("current_liquidities", year, current_liquidity)
+
+    def calculate_equity_ratio(self, year: int):
+        # stockholder equity / total_equiity * 100 -> für %
+        own_capital_quote = (self.df[year][6] / self.df[year][11]) * 100
+        self.save_value_in_dataframe("own_capital_quote", year, own_capital_quote)
+
+    def calculate_EBIT_margin(self, year: int):
+        # ebit / revenue * 100 -> für % anzeige
+        ebit_margin = (self.df[year][13] / self.df[year][12]) * 100
+        self.save_value_in_dataframe("ebit_margin", year, ebit_margin)
+
+    def calculate_RoA(self, year: int):
+        # net income / total equity *100 -> für % anzeige
+        return_on_assets = (self.df[year][15] / self.df[year][11]) * 100
+        self.save_value_in_dataframe("roa", year, return_on_assets)
+
+    def calculate_book_value_per_share(self, year: int):
+        # stockholders equity / shares
+        number_of_shares = self.df[self.latest_year][17]
+        book_value_per_share = self.df[year][6] / number_of_shares
+        self.save_value_in_dataframe("book_value", year, book_value_per_share)
+
+    def calculate_EPS_and_number_of_shares(self, year: int):
+        # wir nehmen die anzahl der shares vom aktuellsten jahr um hier das verhältnis des buchwertes und des eps auf das heutige niveau zu ziehen
+        number_of_shares = self.df[self.latest_year][17]
+        # hier einbauen if year_is_complete() == True:
+        # net_income / shares
+        earnings_per_share = self.df[year][15] / number_of_shares
+        self.save_value_in_dataframe("eps", year, earnings_per_share)
+        return number_of_shares
 
     def build_company_report_main_data(self):
         self.df.at[0, "Company"] = self.name
@@ -554,7 +582,6 @@ class Rechenknecht:
             ebit_average += self.df[str(year)][4]
             own_capital_average += self.df[str(year)][5]
 
-        
         eps_average = eps_average / years_total
         dividends_average = dividends_average / years_total
         roa_average = roa_average / years_total
@@ -578,14 +605,13 @@ class Rechenknecht:
         self.df.at[0, "7 J. KGV"] = self.market_price / eps_average
         try:
             self.df.at[0, "KBGV"] = (self.market_price / self.df["2022"][1]) * (
-                self.market_price / eps_average
+                    self.market_price / eps_average
             )
         except ZeroDivisionError as e:
             print(e)
             logging.error(str(e))
 
-        print("storing result at ... "+ "./documents/analyzed_files/Rechenknecht " + str(self.name) + ".xlsx")
-        self.df.to_excel(
-            "./documents/analyzed_files/Rechenknecht " + str(self.name) + ".xlsx"
-        )
-
+        # Store
+        store_path: str = "./documents/analyzed_files/Rechenknecht " + str(self.name) + ".xlsx"
+        print(f"storing result at ... {store_path}")
+        self.df.to_excel(store_path)
