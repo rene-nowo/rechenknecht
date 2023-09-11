@@ -149,9 +149,13 @@ class Rechenknecht:
         # longterm_liabilities
         key = "longterm_liabilities"
         tags = self.index_map[key][1]
-        long_term_debts = self.set_key_value(key, tags)
 
-        # long_term_debts not found? Replace with total liabilities - current liabilities
+        # long term debt isn't calculated with "set_key_value" anymore as it sometimes took the long term debt
+        # out of the "Notes"-Section, which did not correctly represent the long term debt
+        # long_term_debts = self.set_key_value(key, tags)
+
+        # Calculate long term debt with liabilities - current liabilities
+        long_term_debts = []
         if not long_term_debts:
             total_liabilities = self.set_key_value("total_liabilities", self.index_map["total_liabilities"][1])
             current_liabilities = self.set_key_value("current_liabilities", self.index_map["current_liabilities"][1])
@@ -161,8 +165,8 @@ class Rechenknecht:
                     if y2 == y:
                         longterm_debt: str = str(int(val) - int(val2))
                         long_term_debts.append((key, y, longterm_debt))
+                        break
 
-        # print(long_term_debts)
         if len(long_term_debts) == 0:
             raise Exception(f"No long term debts found: {self.name}, {self.isin}, {self.ticker}, {self.current_year}")
         return long_term_debts
