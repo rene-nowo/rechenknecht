@@ -10,16 +10,10 @@ import json
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import math
+import cProfile
 
 
-def handle_interest_expense(key, value):
-    if key == "interest_expense":
-        interest_expense_value = float(value)
-        if interest_expense_value > 0:
-            value = 0
-        else:
-            value = abs(interest_expense_value)
-    return value
+
 
 
 class Rechenknecht:
@@ -170,7 +164,7 @@ class Rechenknecht:
             for (k, y, val) in total_liabilities:
                 for (k2, y2, val2) in current_liabilities:
                     if y2 == y:
-                        longterm_debt: str = str(int(val) - int(val2))
+                        longterm_debt: str = str(float(val) - float(val2))
                         long_term_debts.append((key, y, longterm_debt))
                         break
 
@@ -287,39 +281,43 @@ class Rechenknecht:
             pass
 
     def set_key_value(self, key, possible_tags):
+        # most important function to find values in the xml file
+
+        # TODO
+        """
+        durch die tag_data liste parallelisiert itererieren
+        sobald ein wert gefunden wurde, alle anderen prozesse stoppen
+        """
         results = []
-        # print(key)
+        logging.debug(f"Key: {key}")
+        
         for tag in possible_tags:
+            logging.debug(f"Suche nach Tag: {tag}")
             tag_data = self.bs_data.find_all(tag)
-            # wenn es keine ergebnisse gibt gar nicht checken
+
             if len(tag_data) != 0:
-                # solange es noch keine ergebnisse gibt in der schleife bleiben
-                while len(results) == 0:
+                for data in tag_data:
+                    tag_value = data.text
+                    unit_ref = data["unitRef"]
+                    if "usd" not in str(unit_ref).lower():
+                        # TODO implement other currencies
+                        logging.warning(f"Unit not known. Please Check: {unit_ref} for tag: {tag}")
 
-                    for data in tag_data:
+                    context_id = data["contextRef"]
 
-                        tag_value = data.text
-                        unit_ref = data["unitRef"]
+                    # hier wird geprüft zu welchem Zeitraum diese Zahl gehört, damit man die Zahl auch zeitlich zuordnen kann
+                    year, is_full_year = self.get_context_date(context_id)
+                    if not year == None:
+                        logging.debug(f"Value {tag_value} found with context Id {context_id}")
+                        logging.debug(f"Year {year}.Is Full Year? " + str(is_full_year))
+                    if is_full_year:
+                        if not ((key, year, tag_value) in results):
+                            results.append((key, year, tag_value))
 
-                        if not str(unit_ref).lower().__contains__("usd"):
-                            print(
-                                "Unit not known. Please Check: ",
-                                unit_ref,
-                                " for tag: ",
-                                tag,
-                            )
-                        context_id = data["contextRef"]
-
-                        # print(context_id)
-                        # hier wird geprüft zu welchem Zeitraum diese Zahl gehört, damit man die Zahl auch zeitlich zuordnen kann
-                        year, is_full_year = self.get_context_date(context_id)
-
-                        if is_full_year:
-                            if not ((key, year, tag_value) in results):
-                                results.append((key, year, tag_value))
 
         if len(results) == 0:
             print("NICHTS GEFUNDEN! Key: ", key)
+
 
         return results
 
@@ -329,6 +327,7 @@ class Rechenknecht:
         # ziehe das anfangsdatum und das end-datum, um zu schauen ob es sich auf ein jahr bezieht
         context = self.bs_data.find(id=context_id)
         # print(context_id)
+            
         start_date = context.find("startDate").text
         start = datetime.strptime(start_date, "%Y-%m-%d")
 
@@ -336,8 +335,8 @@ class Rechenknecht:
         end = datetime.strptime(end_date, "%Y-%m-%d")
 
         diff = end - start
-
-        if diff.days > 350 and (int(end_date.split("-")[0]) == int(self.current_year)):
+       
+        if diff.days > 350: #and (int(end_date.split("-")[0]) == int(self.current_year))
             return True
 
         return False
@@ -347,7 +346,7 @@ class Rechenknecht:
 
         segments = context.find_all("segment")
         start_date = None
-        # segments = 0, weil man nur werte haben will die zu keinem segement gehören
+        # segments = 0, weil man nur werte haben will die zu keinem segment gehören
         if len(segments) == 0:
             try:
                 start_date = context.find("startDate").text
@@ -365,10 +364,19 @@ class Rechenknecht:
 
         return None, None
 
+    def handle_interest_expense(self, key, value):
+        if key == "interest_expense":
+            interest_expense_value = float(value)
+            if interest_expense_value > 0:
+                value = 0
+            else:
+                value = abs(interest_expense_value)
+        return value
+
     def save_value_in_dataframe(self, key, year, value):
         index = self.index_map[key][0]
 
-        value = handle_interest_expense(key, value)
+        value = self.handle_interest_expense(key, value)
 
         self.df.at[index, year] = float(value)
 
@@ -414,15 +422,14 @@ class Rechenknecht:
             net_incomes: list,
     ):
         # wenn es die letzte Datei ist, dann nimm alle Werte um auch die vorherigen Jahre zu speichern
-        # print("Aktuelles Jahr: ", self.current_year)
-        # print("Letzte Datei: ", self.is_last_file)
-        if self.is_last_file == True:
+        if self.is_last_file:
             keys_data = [revenues, ebits, interest_expenses, net_incomes]
             for key_data in keys_data:
                 for tupel in key_data:
                     key = tupel[0]
                     year = tupel[1]
                     result = tupel[2]
+                    logging.debug(f"{key} {year} {result}")
 
                     self.save_value_in_dataframe(key, year, result)
         else:
@@ -461,24 +468,22 @@ class Rechenknecht:
     def set_dividends(self):
         key = "dividends"
         tags = self.index_map[key][1]
-        dividends = self.set_key_value(key, tags)
-
+        dividends = self.set_key_value(key, tags)        
         # wenn es die letzte Datei ist, dann nimm alle Werte um auch die vorherigen Jahre zu speichern
-        # print("Aktuelles Jahr: ", self.current_year)
-        # print("Letzte Datei: ", self.is_last_file)
-        if self.is_last_file:
-            keys_data = [dividends]
-            for key_data in keys_data:
-                for tupel in key_data:
-                    key = tupel[0]
-                    year = tupel[1]
-                    result = tupel[2]
+        if len(dividends) > 0:
+            if self.is_last_file:
+                keys_data = [dividends]
+                for key_data in keys_data:
+                    for tupel in key_data:
+                        key = tupel[0]
+                        year = tupel[1]
+                        result = tupel[2]
 
-                    self.save_value_in_dataframe(key, year, result)
-        else:
-            # 3-tuple (key, year, value)
-            dividend = dividends[0]
-            self.save_value_in_dataframe(dividend[0], dividend[1], dividend[2])
+                        self.save_value_in_dataframe(key, year, result)
+            else:
+                # 3-tuple (key, year, value)
+                dividend = dividends[0]
+                self.save_value_in_dataframe(dividend[0], dividend[1], dividend[2])
 
     def is_year_complete(self, year) -> Boolean:
         i = 6
@@ -603,12 +608,18 @@ class Rechenknecht:
         equity_ratio_average = 0
 
         for year in self.calculated_years:
-            eps_average += self.df[str(year)][0]
-            dividends_average += self.df[str(year)][2]
-            roa_average += self.df[str(year)][3]
-            ebit_average += self.df[str(year)][4]
-            equity_ratio_average += self.df[str(year)][5]
-
+            if self.df[str(year)][0] != None:
+                eps_average += self.df[str(year)][0]
+            if self.df[str(year)][2] != None:
+                dividends_average += self.df[str(year)][2]
+            if self.df[str(year)][3] != None:
+                roa_average += self.df[str(year)][3]
+            if self.df[str(year)][4] != None:
+                ebit_average += self.df[str(year)][4]
+            if self.df[str(year)][5] != None:
+                equity_ratio_average += self.df[str(year)][5]
+        
+    
         eps_average = eps_average / years_total
         dividends_average = dividends_average / years_total
         roa_average = roa_average / years_total

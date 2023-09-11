@@ -5,6 +5,11 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from multiprocessing import Pool
 import argparse
+import logging
+import cProfile
+
+# Configure logging
+logging.basicConfig(filename='./logs/'+ __name__ + '.log', level=logging.DEBUG)
 
 edgar = EDGAR_API()
 
@@ -118,7 +123,8 @@ if __name__ == "__main__":
     ticker_map: str = "./ticker-cik_map.txt"
 
     if args.ticker:
-        analyze_company(args.ticker)
+        #analyze_company(args.ticker)
+        cProfile.run('analyze_company(args.ticker)')
     elif args.all:
         df = pd.read_csv(
             ticker_map,
@@ -131,4 +137,5 @@ if __name__ == "__main__":
     else:
         # If no args are given, analyze Foot Locker
         ticker_symbol = "fl"
-        analyze_company(ticker_symbol)
+        cProfile.run('analyze_company(ticker_symbol)')
+        #analyze_company(ticker_symbol)

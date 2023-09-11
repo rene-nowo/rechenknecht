@@ -47,7 +47,7 @@ class EDGAR_API:
             dir_path = pathlib.Path(file_path / str(ticker)).absolute()
             # create directory for all following files
             if not os.path.exists(dir_path):
-                os.makedirs(dir_path.lower())
+                os.makedirs(str(dir_path).lower())
 
             self.cik = self.cik_map[1][ticker.lower()]
             cik = generate_cik_format(str(self.cik))

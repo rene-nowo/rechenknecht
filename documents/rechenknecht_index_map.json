@@ -18,7 +18,7 @@
         ]],
     "ebit":[13,["us-gaap:OperatingIncomeLoss"]],
     "interest_expense":[14,["us-gaap:InterestExpense","us-gaap:InterestIncomeExpenseNonoperatingNet"]],
-    "net_income":[15,["us-gaap:NetIncomeLoss"]],
+    "net_income":[15,["us-gaap:NetIncomeLoss","us-gaap:ProfitLoss"]],
     "tier":[16],
     "shares":[17, ["us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding","dei:EntityCommonStockSharesOutstanding"]]
 }

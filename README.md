@@ -11,25 +11,4 @@ Some filings are still submitted in paper and are not accessible through EDGAR. 
 Unternehmenssuche
 https://www.sec.gov/edgar/searchedgar/companysearch
 
-
-
 491
-
- <context id="Duration_2_3_2019_To_2_1_2020_WQ4qNujpN0Sx_fgXZekqUw">
-        <entity>
-            <identifier scheme="http://www.sec.gov/CIK">0000850209</identifier>
-        </entity>
-        <period>
-            <startDate>2019-02-03</startDate>
-            <endDate>2020-02-01</endDate>
-        </period>
-
-<context id="Duration_11_3_2019_To_2_1_2020_1AxMl6tnskC_9wbK4MF0CA">
-        <entity>
-            <identifier scheme="http://www.sec.gov/CIK">0000850209</identifier>
-        </entity>
-        <period>
-            <startDate>2019-11-03</startDate>
-            <endDate>2020-02-01</endDate>
-        </period>
-    </context>
