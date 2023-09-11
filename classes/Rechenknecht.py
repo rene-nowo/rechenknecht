@@ -12,6 +12,16 @@ from dateutil.relativedelta import relativedelta
 import math
 
 
+def handle_interest_expense(key, value):
+    if key == "interest_expense":
+        interest_expense_value = float(value)
+        if interest_expense_value > 0:
+            value = 0
+        else:
+            value = abs(interest_expense_value)
+    return value
+
+
 class Rechenknecht:
     df = pd.DataFrame(
         columns=[
@@ -46,7 +56,8 @@ class Rechenknecht:
     latest_year = "2023"
 
     # in dem dokument sind alle tags und indexes für die analyse zu finden
-    with open("./documents/rechenknecht_index_map.json", "r") as f:
+    index_map_path = pathlib.Path("./documents/rechenknecht_index_map.json").absolute()
+    with open(index_map_path, "r") as f:
         index_map = json.load(f)
 
     def __init__(self, name, isin, currency, ticker: str, sector):
@@ -115,17 +126,7 @@ class Rechenknecht:
         current_liabilities = self.set_key_value(key, tags)
         # print(current_liabilities)
 
-        # longterm_liabilities
-        key = "longterm_liabilities"
-        tags = self.index_map[key][1]
-        long_term_debts = self.set_key_value(key, tags)
-        # print(long_term_debts)
-
-        if len(long_term_debts) == 0:
-            long_term_debts = [(key, self.current_year, 0)]
-            print("LONG TERM DEBTS CHECK")
-            print(long_term_debts)
-            exit()
+        long_term_debts = self.calculate_longterm_liabilities()
 
         # Total stockholders’ equity
         key = "stockholders_equity"
@@ -143,6 +144,28 @@ class Rechenknecht:
             long_term_debts,
             total_equities,
         )
+
+    def calculate_longterm_liabilities(self):
+        # longterm_liabilities
+        key = "longterm_liabilities"
+        tags = self.index_map[key][1]
+        long_term_debts = self.set_key_value(key, tags)
+
+        # long_term_debts not found? Replace with total liabilities - current liabilities
+        if not long_term_debts:
+            total_liabilities = self.set_key_value("total_liabilities", self.index_map["total_liabilities"][1])
+            current_liabilities = self.set_key_value("current_liabilities", self.index_map["current_liabilities"][1])
+            long_term_debts = []
+            for (k, y, val) in total_liabilities:
+                for (k2, y2, val2) in current_liabilities:
+                    if y2 == y:
+                        longterm_debt: str = str(int(val) - int(val2))
+                        long_term_debts.append((key, y, longterm_debt))
+
+        # print(long_term_debts)
+        if len(long_term_debts) == 0:
+            raise Exception(f"No long term debts found: {self.name}, {self.isin}, {self.ticker}, {self.current_year}")
+        return long_term_debts
 
     def save_balance_sheet_data(
             self,
@@ -286,7 +309,6 @@ class Rechenknecht:
 
         if len(results) == 0:
             print("NICHTS GEFUNDEN! Key: ", key)
-            results.append((key, self.current_year, 0))
 
         return results
 
@@ -335,12 +357,7 @@ class Rechenknecht:
     def save_value_in_dataframe(self, key, year, value):
         index = self.index_map[key][0]
 
-        if key == "interest_expense":
-            interest_expense_value = float(value)
-            if interest_expense_value > 0:
-                value = 0
-            else:
-                value = abs(interest_expense_value)
+        value = handle_interest_expense(key, value)
 
         self.df.at[index, year] = float(value)
 
@@ -523,7 +540,6 @@ class Rechenknecht:
         # net_income / shares
         earnings_per_share = self.df[year][15] / number_of_shares
         self.save_value_in_dataframe("eps", year, earnings_per_share)
-        return number_of_shares
 
     def build_company_report_main_data(self):
         self.df.at[0, "Company"] = self.name
