@@ -4,6 +4,7 @@ from classes.Rechenknecht import Rechenknecht
 import pandas as pd
 from bs4 import BeautifulSoup
 from multiprocessing import Pool
+import argparse
 
 edgar = EDGAR_API()
 
@@ -20,10 +21,10 @@ def search_edgar_data(ticker: str):
         # sec_data.to_csv(f"sec_data_{ticker}.csv", sep=";")
         yearly_reports = sec_data[
             (sec_data["form"] == "10-K") & (sec_data["isInlineXBRL"] == 1)
-        ].reset_index()
+            ].reset_index()
         quarter_reports = sec_data[
             (sec_data["form"] == "10-Q") & (sec_data["isInlineXBRL"] == 1)
-        ].reset_index()
+            ].reset_index()
 
         # start downloading all form 10-K files available
         files = []
@@ -38,12 +39,13 @@ def search_edgar_data(ticker: str):
 
     return None, None, None
 
+
 def analyze_company(ticker):
     file_list, name, industry = search_edgar_data(ticker)
 
     if file_list != None:
         rechner = Rechenknecht(name, "", "USD", ticker, industry)
-        #rechner = Rechenknecht(ticker)
+        # rechner = Rechenknecht(ticker)
         rechner.set_report_date(file_list[0][1])
 
         # es wird immer bei der neusten Datei angefangen bzw. der letzten Meldung
@@ -86,6 +88,7 @@ def analyze_company(ticker):
 
         rechner.calculate_averages()
 
+
 def worker(ticker):
     try:
         print(f"Processing {ticker}")
@@ -94,6 +97,7 @@ def worker(ticker):
         print(e)
     finally:
         print(f"Finished processing {ticker}")
+
 
 def analyze_all(ticker_list):
     # Number of worker processes
@@ -106,17 +110,23 @@ def analyze_all(ticker_list):
 
 if __name__ == "__main__":
     # Read the CSV file into a DataFrame
-    df = pd.read_csv(
-        "./ticker-cik_map.txt",
-        names=["Ticker","CIK","ANALYSED_RESULT"],
-        header=None,
-        sep="\t",
-    )
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--ticker", help="Ticker of the company to analyze", required=False)
+    parser.add_argument("--all", help="Analyze all companies", required=False, action="store_true")
+    args = parser.parse_args()
 
-    ticker_list = list(df["Ticker"][:100])
-
-    analyze_company("fl")
-    
-
-        
-
+    if args.ticker:
+        analyze_company(args.ticker)
+    elif args.all:
+        df = pd.read_csv(
+            "./ticker-cik_map.txt",
+            names=["Ticker", "CIK", "ANALYSED_RESULT"],
+            header=None,
+            sep="\t",
+        )
+        ticker_list = list(df["Ticker"][:100])
+        analyze_all(ticker_list)
+    else:
+        # If no args are given, analyze Foot Locker
+        ticker_symbol = "fl"
+        analyze_company(ticker_symbol)
