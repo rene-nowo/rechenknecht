@@ -146,20 +146,27 @@ class Rechenknecht:
         )
 
     def calculate_longterm_liabilities(self):
-        # longterm_liabilities
-        key = "longterm_liabilities"
-        tags = self.index_map[key][1]
+        """
+        Calculate the long-term-liabilities
 
-        # long term debt isn't calculated with "set_key_value" anymore as it sometimes took the long term debt
-        # out of the "Notes"-Section, which did not correctly represent the long term debt
+
+        long-term-debt isn't calculated with "set_key_value" anymore as it sometimes took the long-term-debt
+        out of the "Notes"-Section, which did not correctly represent the long-term-debt
+        """
+
+        ############################
+        # deprecated
         # long_term_debts = self.set_key_value(key, tags)
+        ############################
 
         # Calculate long term debt with liabilities - current liabilities
+        key: str = "longterm_liabilities"
         long_term_debts = []
         if not long_term_debts:
             total_liabilities = self.set_key_value("total_liabilities", self.index_map["total_liabilities"][1])
             current_liabilities = self.set_key_value("current_liabilities", self.index_map["current_liabilities"][1])
-            long_term_debts = []
+
+            # if the years y and y2 are the same, then subtract the current liabilities from the total liabilities
             for (k, y, val) in total_liabilities:
                 for (k2, y2, val2) in current_liabilities:
                     if y2 == y:
