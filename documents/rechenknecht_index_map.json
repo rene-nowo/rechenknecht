@@ -16,7 +16,7 @@
         "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
         "us-gaap:Revenues"
         ]],
-    "ebit":[13,["us-gaap:OperatingIncomeLoss"]],
+    "ebit":[13,["us-gaap:OperatingIncomeLoss", "us-gaap:IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest"]],
     "interest_expense":[14,["us-gaap:InterestExpense","us-gaap:InterestIncomeExpenseNonoperatingNet"]],
     "net_income":[15,["us-gaap:NetIncomeLoss"]],
     "tier":[16],
