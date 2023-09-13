@@ -56,6 +56,7 @@ class RechenknechtBeta:
                  log_legel=logging.DEBUG):
         logger.setLevel(log_legel)
 
+        print(f"RECHENKNECHTBETA CALLED at {name}")
         # initial field values to work with.
         self.current_year = None
         self.market_price = None
@@ -267,14 +268,30 @@ class RechenknechtBeta:
             year = self.get_fiscal_year_by_context(total_equity["contextRef"])
             self.df.loc[TOTAL_ASSETS, year] = float(total_equity.text)
 
-    def set_stockholders_equity(self):
+    def set_stockholders_equity(self, limit=2, retry=True):
         # Total stockholders’ equity
         key = STOCKHOLDERS_EQUITY
         tags = index_map[key][1]
-        total_equities = self.bs_data.find_all(tags)[:2]
+        total_equities = self.bs_data.find_all(tags)[:limit]
         for total_equity in total_equities:
             year = self.get_fiscal_year_by_context(total_equity["contextRef"])
-            self.df.loc[STOCKHOLDERS_EQUITY, year] = float(total_equity.text)
+            total_equity = total_equity.text
+
+
+            # So sometimes the key "Stockholders equity doesn't work, which means the first 2 values are empty strings ("")"
+            # This means, we have to somehow adjust the function to get the correct value. The solution is:
+            # Retry set_stockholders_equity with a higher limit. If it still doesn't work, then just skip it.
+            if total_equity == "" and retry is True:
+                retry = False
+                self.set_stockholders_equity(limit=limit+2, retry=retry)
+
+
+            # If the total_equity is still "", then just continue the loop
+            if total_equity == "":
+                continue
+
+
+            self.df.loc[STOCKHOLDERS_EQUITY, year] = float(total_equity)
 
     def set_current_liabilities(self):
         key = SHORTTERM_LIABILITIES
@@ -308,17 +325,29 @@ class RechenknechtBeta:
         key = GOODWILL
         tags = index_map[key][1]
         goodwills = self.bs_data.find_all(tags)[:2]
+
         for goodwill in goodwills:
             year = self.get_fiscal_year_by_context(goodwill["contextRef"])
-            self.df.loc[GOODWILL, year] = float(goodwill.text)
+
+            # init with 0, because if there is no intangible asset, the df would have NaN, which we don't want
+            self.df.loc[GOODWILL, year] = 0
+
+            goodwill = float(goodwill.text)
+            self.df.loc[GOODWILL, year] = goodwill
 
     def set_intangible_assets(self):
         key = INTANGIBLE_ASSETS
         tags = index_map[key][1]
-        goodwills = self.bs_data.find_all(tags)[:2]
-        for goodwill in goodwills:
-            year = self.get_fiscal_year_by_context(goodwill["contextRef"])
-            self.df.loc[INTANGIBLE_ASSETS, year] = float(goodwill.text)
+        intangible_assets = self.bs_data.find_all(tags)[:2]
+
+        for intangible in intangible_assets:
+            year = self.get_fiscal_year_by_context(intangible["contextRef"])
+
+            # init with 0, because if there is no intangible asset, the df would have NaN, which we don't want
+            self.df.loc[INTANGIBLE_ASSETS, year] = 0
+
+            intangibles = float(intangible.text)
+            self.df.loc[INTANGIBLE_ASSETS, year] = intangibles
 
     def get_fiscal_year_by_context(self, contextid):
         """

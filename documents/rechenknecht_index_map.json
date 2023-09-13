@@ -1,7 +1,7 @@
 {
     "eps":[0],
     "book_value":[1],
-    "dividends":[2, ["us-gaap:CommonStockDividendsPerShareDeclared"]],
+    "dividends":[2, ["us-gaap:CommonStockDividendsPerShareDeclared", "us-gaap:CommonStockDividendsPerShareCashPaid"]],
     "roa":[3],
     "ebit_margin":[4],
     "own_capital_quote":[5],
@@ -22,5 +22,5 @@
     "tier":[16],
     "shares":[17, ["us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding","dei:EntityCommonStockSharesOutstanding"]],
     "goodwill": [18, ["us-gaap:Goodwill"]],
-    "intangible_assets": [19, ["us-gaap:IntangibleAssetsNetExcludingGoodwill"]]
+    "intangible_assets": [19, ["us-gaap:IntangibleAssetsNetExcludingGoodwill", "us-gaap:OtherIntangibleAssetsNet", "us-gaap:FiniteLivedIntangibleAssetsNet"]]
 }
