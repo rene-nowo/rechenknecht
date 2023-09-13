@@ -5,7 +5,7 @@ import json
 import pandas as pd
 import os
 
-file_path = pathlib.Path("./filings").absolute()
+file_path = pathlib.Path(__file__).parent.parent / "filings"
 
 
 def generate_cik_format(cik: str):
@@ -33,7 +33,8 @@ class EDGAR_API:
         self.df = None
         self.cik = None
         self.ticker = None
-        cik_map_path = "./maps/ticker-cik_map.txt"
+
+        cik_map_path = pathlib.Path(__file__).parent.parent.absolute() / "maps/ticker-cik_map.txt"
         cik_map = pd.read_csv(
             cik_map_path, sep="\t", header=None
         )

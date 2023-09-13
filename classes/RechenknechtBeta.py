@@ -50,15 +50,20 @@ TOTAL_LIABILITIES = "total_liabilities"
 ACCRUED_EXPENSES_AND_ACCOUNTS_PAYABLE = "accrued_expenses_and_accounts_payable"
 #### KEYS FOR INDEX MAP ####
 
-index_map_path = pathlib.Path("./documents/rechenknecht_index_map.json").absolute()
-with open(index_map_path, "r") as f:
-    index_map = json.load(f)
+
+try:
+    index_map_path = (pathlib.Path(__file__).parent.parent / "documents" / "rechenknecht_index_map.json").absolute()
+    with open(index_map_path, "r") as f:
+        index_map = json.load(f)
+except FileNotFoundError:
+    logger.error(f"Path {index_map_path} doesn't exist.")
+
 
 
 class RechenknechtBeta:
     def __init__(self, name: str, isin: str, currency: str, ticker: str, sector: str, file_list,
-                 log_legel=logging.DEBUG):
-        logger.setLevel(log_legel)
+                 log_level=logging.DEBUG):
+        logger.setLevel(log_level)
 
         print(f"RECHENKNECHTBETA CALLED at {name}")
         # initial field values to work with.
@@ -110,7 +115,8 @@ class RechenknechtBeta:
 
         self.calculate()
 
-        self.df.to_csv(f"./documents/csv/{self.name}.csv")
+    def to_csv(self, path: pathlib.Path):
+        self.df.to_csv(f"{path}/{self.name}.csv")
 
     def get_stock_price(self):
         stock_info = yf.Ticker(self.ticker)

@@ -1,8 +1,7 @@
+import pathlib
 import re
 from classes.Edgar_api import EDGAR_API
-from classes.Rechenknecht import Rechenknecht
 import pandas as pd
-from bs4 import BeautifulSoup
 from multiprocessing import Pool
 import argparse
 import logging
@@ -11,7 +10,7 @@ import cProfile
 # Configure logging
 from classes.RechenknechtBeta import RechenknechtBeta
 
-logging.basicConfig(filename='./logs/'+ __name__ + '.log', level=logging.DEBUG)
+logging.basicConfig(filename='./logs/' + __name__ + '.log', level=logging.DEBUG)
 
 edgar = EDGAR_API()
 
@@ -51,10 +50,8 @@ def analyze_company(ticker):
     file_list, name, industry = search_edgar_data(ticker)
 
     if file_list is not None:
-        rechner = Rechenknecht(name, "", "USD", ticker, industry)
         rechner_beta = RechenknechtBeta(name, "", "USD", ticker, industry, file_list)
-
-
+        rechner_beta.to_csv(pathlib.Path("documents/csv"))
 
         """
         # rechner = Rechenknecht(ticker)
@@ -130,7 +127,7 @@ if __name__ == "__main__":
     ticker_map: str = "./ticker-cik_map.txt"
 
     if args.ticker:
-        #analyze_company(args.ticker)
+        # analyze_company(args.ticker)
         cProfile.run('analyze_company(args.ticker)')
     elif args.all:
         df = pd.read_csv(
@@ -143,7 +140,7 @@ if __name__ == "__main__":
         analyze_all(ticker_list)
     else:
         # If no args are given, analyze Foot Locker
-        ticker_symbol = "fl"
-        #ticker_symbol = "pfe"
-        #cProfile.run('analyze_company(ticker_symbol)')
+        ticker_symbol = "pfe"
+        # ticker_symbol = "pfe"
+        # cProfile.run('analyze_company(ticker_symbol)')
         analyze_company(ticker_symbol)
