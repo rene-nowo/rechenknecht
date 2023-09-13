@@ -9,6 +9,8 @@ import logging
 import cProfile
 
 # Configure logging
+from classes.RechenknechtBeta import RechenknechtBeta
+
 logging.basicConfig(filename='./logs/'+ __name__ + '.log', level=logging.DEBUG)
 
 edgar = EDGAR_API()
@@ -50,6 +52,11 @@ def analyze_company(ticker):
 
     if file_list is not None:
         rechner = Rechenknecht(name, "", "USD", ticker, industry)
+        rechner_beta = RechenknechtBeta(name, "", "USD", ticker, industry, file_list)
+
+
+
+        """
         # rechner = Rechenknecht(ticker)
         rechner.set_report_date(file_list[0][1])
 
@@ -91,7 +98,7 @@ def analyze_company(ticker):
                 rechner.calculated_years.append(year)
                 rechner.calculate_returns(str(year))
 
-        rechner.calculate_averages()
+        rechner.calculate_averages()"""
 
 
 def worker(ticker):
@@ -137,5 +144,6 @@ if __name__ == "__main__":
     else:
         # If no args are given, analyze Foot Locker
         ticker_symbol = "fl"
-        cProfile.run('analyze_company(ticker_symbol)')
-        #analyze_company(ticker_symbol)
+        #ticker_symbol = "pfe"
+        #cProfile.run('analyze_company(ticker_symbol)')
+        analyze_company(ticker_symbol)

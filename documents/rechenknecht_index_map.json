@@ -20,5 +20,7 @@
     "interest_expense":[14,["us-gaap:InterestExpense","us-gaap:InterestIncomeExpenseNonoperatingNet"]],
     "net_income":[15,["us-gaap:NetIncomeLoss","us-gaap:ProfitLoss"]],
     "tier":[16],
-    "shares":[17, ["us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding","dei:EntityCommonStockSharesOutstanding"]]
+    "shares":[17, ["us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding","dei:EntityCommonStockSharesOutstanding"]],
+    "goodwill": [18, ["us-gaap:Goodwill"]],
+    "intangible_assets": [19, ["us-gaap:IntangibleAssetsNetExcludingGoodwill"]]
 }
