@@ -17,6 +17,7 @@ import cProfile
 logger = logging.getLogger(__name__)
 
 #### KEYS FOR INDEX MAP ####
+KBGV_CONSERVATIVE="KGBV_conservative"
 KBGV = "KBGV"
 KGV = "KGV"
 RO_I = "RoI"
@@ -126,9 +127,11 @@ class RechenknechtBeta:
         for share in shares_outstanding:
             try:
                 year = self.get_fiscal_year_by_context(share["contextRef"])
-                self.df.loc[NUMBER_OF_SHARES, year] = int(share.text)
+                number_of_shares = share.text
+                number_of_shares = int(float(number_of_shares))
+                self.df.loc[NUMBER_OF_SHARES, year] = number_of_shares
             except ValueError:
-                logger.debug(f"ValueError for {self.name} in {year}")
+                logger.debug(f"ValueError for {self.name} in {year}. Number of shares: {number_of_shares}")
 
     def set_number_of_shares_diluted(self):
         tag = "us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding"
@@ -136,7 +139,8 @@ class RechenknechtBeta:
         for share in shares_outstanding:
             try:
                 year = self.get_fiscal_year_by_context(share["contextRef"])
-                self.df.loc[NUMBER_OF_SHARES_DILUTED, year] = int(share.text)
+                number_of_shares = int(float(share.text))
+                self.df.loc[NUMBER_OF_SHARES_DILUTED, year] = number_of_shares
             except ValueError:
                 logger.debug(f"ValueError for {self.name} in {year}")
 
@@ -258,7 +262,7 @@ class RechenknechtBeta:
         # total equity
         key = TOTAL_ASSETS
         tags = index_map[key][1]
-        total_equities = self.bs_data.find_all(tags)
+        total_equities = self.bs_data.find_all(tags)[:2]
         for total_equity in total_equities:
             year = self.get_fiscal_year_by_context(total_equity["contextRef"])
             self.df.loc[TOTAL_ASSETS, year] = float(total_equity.text)
@@ -267,7 +271,7 @@ class RechenknechtBeta:
         # Total stockholders’ equity
         key = STOCKHOLDERS_EQUITY
         tags = index_map[key][1]
-        total_equities = self.bs_data.find_all(tags)
+        total_equities = self.bs_data.find_all(tags)[:2]
         for total_equity in total_equities:
             year = self.get_fiscal_year_by_context(total_equity["contextRef"])
             self.df.loc[STOCKHOLDERS_EQUITY, year] = float(total_equity.text)
@@ -275,7 +279,7 @@ class RechenknechtBeta:
     def set_current_liabilities(self):
         key = SHORTTERM_LIABILITIES
         tags = index_map[key][1]
-        current_liabilities = self.bs_data.find_all(tags)
+        current_liabilities = self.bs_data.find_all(tags)[:2]
         for current_liability in current_liabilities:
             year = self.get_fiscal_year_by_context(current_liability["contextRef"])
             self.df.loc[SHORTTERM_LIABILITIES, year] = float(current_liability.text)
@@ -283,7 +287,7 @@ class RechenknechtBeta:
     def set_current_assets(self):
         key = CURRENT_ASSETS
         tags = index_map[key][1]
-        current_assets = self.bs_data.find_all(tags)
+        current_assets = self.bs_data.find_all(tags)[:2]
         for current_asset in current_assets:
             year = self.get_fiscal_year_by_context(current_asset["contextRef"])
             self.df.loc[CURRENT_ASSETS, year] = float(current_asset.text)
@@ -291,7 +295,7 @@ class RechenknechtBeta:
     def set_longterm_liabilities(self):
         key = TOTAL_LIABILITIES
         tags = index_map[key][1]
-        total_liabilities = self.bs_data.find_all(tags)
+        total_liabilities = self.bs_data.find_all(tags)[:2]
 
         # Total liabilities saved in longterm-liabilities. And then subtract shortterm-liabilities
         for total_liability in total_liabilities:
@@ -303,7 +307,7 @@ class RechenknechtBeta:
     def set_goodwill(self):
         key = GOODWILL
         tags = index_map[key][1]
-        goodwills = self.bs_data.find_all(tags)
+        goodwills = self.bs_data.find_all(tags)[:2]
         for goodwill in goodwills:
             year = self.get_fiscal_year_by_context(goodwill["contextRef"])
             self.df.loc[GOODWILL, year] = float(goodwill.text)
@@ -311,7 +315,7 @@ class RechenknechtBeta:
     def set_intangible_assets(self):
         key = INTANGIBLE_ASSETS
         tags = index_map[key][1]
-        goodwills = self.bs_data.find_all(tags)
+        goodwills = self.bs_data.find_all(tags)[:2]
         for goodwill in goodwills:
             year = self.get_fiscal_year_by_context(goodwill["contextRef"])
             self.df.loc[INTANGIBLE_ASSETS, year] = float(goodwill.text)
@@ -359,7 +363,7 @@ class RechenknechtBeta:
     def set_revenue(self):
         key = REVENUE
         tags = index_map[key][1]
-        revenues = self.bs_data.find_all(tags)
+        revenues = self.bs_data.find_all(tags)[:3]
         for revenue in revenues:
             try:
                 year = self.get_fiscal_year_by_context(revenue["contextRef"])
@@ -371,7 +375,7 @@ class RechenknechtBeta:
     def set_operating_income(self):
         key = EBIT
         tags = index_map[key][1]
-        operating_incomes = self.bs_data.find_all(tags)
+        operating_incomes = self.bs_data.find_all(tags)[:3]
         for operating_income in operating_incomes:
             try:
                 year = self.get_fiscal_year_by_context(operating_income["contextRef"])
@@ -383,7 +387,7 @@ class RechenknechtBeta:
     def set_interest_expenses(self):
         key = INTEREST_EXPENSE
         tags = index_map[key][1]
-        interest_expenses = self.bs_data.find_all(tags)
+        interest_expenses = self.bs_data.find_all(tags)[:3]
         for interest_expense in interest_expenses:
             # Important. If interest expense is positive, set to zero, because nothing was paid, otherwise absolute value
             if float(interest_expense.text) > 0:
@@ -401,7 +405,7 @@ class RechenknechtBeta:
     def set_net_income(self):
         key = NET_INCOME
         tags = index_map[key][1]
-        net_incomes = self.bs_data.find_all(tags)
+        net_incomes = self.bs_data.find_all(tags)[:3]
         for net_income in net_incomes:
             try:
                 year = self.get_fiscal_year_by_context(net_income["contextRef"])
@@ -455,7 +459,10 @@ class RechenknechtBeta:
         # [:, 0] means first column of the dataframe, which is the latest year
         self.df.loc[BOOK_VALUE_PER_SHARE, AVG] = self.df.iloc[:, 0][BOOK_VALUE_PER_SHARE]  # use latest year
         self.df.loc[CONSERVATIVE_BOOK_VALUE_PER_SHARE, AVG] = self.df.iloc[:, 0][CONSERVATIVE_BOOK_VALUE_PER_SHARE]  # use latest year
-        self.df.loc[KBGV, AVG] = (self.market_price / self.df.loc[CONSERVATIVE_BOOK_VALUE_PER_SHARE, AVG]) * \
+        self.df.loc[KBGV_CONSERVATIVE, AVG] = (self.market_price / self.df.loc[CONSERVATIVE_BOOK_VALUE_PER_SHARE, AVG]) * \
+                                 self.df.loc[KGV, AVG]
+
+        self.df.loc[KBGV, AVG] = (self.market_price / self.df.loc[BOOK_VALUE_PER_SHARE, AVG]) * \
                                  self.df.loc[KGV, AVG]
 
     def clean(self):
@@ -468,4 +475,5 @@ class RechenknechtBeta:
         self.df = self.df.dropna(axis=1, how="all")
 
     def calculate_TIER(self):
-        self.df.loc[TIER] = self.df.loc[EBIT] / self.df.loc[INTEREST_EXPENSE]
+        rounding_factor: float = 0.0000000001
+        self.df.loc[TIER] = self.df.loc[EBIT] / (self.df.loc[INTEREST_EXPENSE] + rounding_factor)
