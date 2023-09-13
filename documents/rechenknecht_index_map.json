@@ -22,5 +22,9 @@
     "tier":[16],
     "shares":[17, ["us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding","dei:EntityCommonStockSharesOutstanding"]],
     "goodwill": [18, ["us-gaap:Goodwill"]],
-    "intangible_assets": [19, ["us-gaap:IntangibleAssetsNetExcludingGoodwill", "us-gaap:OtherIntangibleAssetsNet", "us-gaap:FiniteLivedIntangibleAssetsNet"]]
+    "intangible_assets": [19, ["us-gaap:IntangibleAssetsNetExcludingGoodwill", "us-gaap:OtherIntangibleAssetsNet", "us-gaap:FiniteLivedIntangibleAssetsNet"]],
+    "accrued_expenses_and_accounts_payable": [20, ["us-gaap:AccountsPayableAndOtherAccruedLiabilities"]],
+    "assets": [21, ["us-gaap:Assets"]],
+    "cash" : [22, ["us-gaap:CashAndCashEquivalentsAtCarryingValue"]],
+    "accounts_receivable" : [23, ["us-gaap:AccountsReceivableNet"]]
 }

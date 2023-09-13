@@ -17,6 +17,9 @@ import cProfile
 logger = logging.getLogger(__name__)
 
 #### KEYS FOR INDEX MAP ####
+CASH="cash"
+ACCOUNTS_RECEIVABLE="accounts_receivable"
+TOTAL_ASSETS="assets"
 KBGV_CONSERVATIVE="KGBV_conservative"
 KBGV = "KBGV"
 KGV = "KGV"
@@ -44,6 +47,7 @@ BOOK_VALUE_PER_SHARE = "book_value_per_share"
 EPS = "EPS"
 DIVIDENDS_PER_SHARE = "dividends_per_share"
 TOTAL_LIABILITIES = "total_liabilities"
+ACCRUED_EXPENSES_AND_ACCOUNTS_PAYABLE = "accrued_expenses_and_accounts_payable"
 #### KEYS FOR INDEX MAP ####
 
 index_map_path = pathlib.Path("./documents/rechenknecht_index_map.json").absolute()
@@ -235,11 +239,11 @@ class RechenknechtBeta:
 
     def set_balance_sheet_data(self):
         # BALANCE SHEET
+        self.set_total_equity()
         self.set_current_assets()
         self.set_current_liabilities()
         self.set_longterm_liabilities()
         self.set_stockholders_equity()
-        self.set_total_equity()
         self.set_intangible_assets()
         self.set_goodwill()
 
@@ -301,6 +305,30 @@ class RechenknechtBeta:
             year = self.get_fiscal_year_by_context(current_liability["contextRef"])
             self.df.loc[SHORTTERM_LIABILITIES, year] = float(current_liability.text)
 
+        # No current liabilities found? Calculate them.
+        if not current_liabilities:
+            self.calculate_current_liabilities()
+
+    def calculate_current_liabilities(self):
+        key = TOTAL_LIABILITIES
+        tags = index_map[key][1]
+        total_liabilities = self.bs_data.find_all(tags)[:2]
+
+        key = ACCRUED_EXPENSES_AND_ACCOUNTS_PAYABLE
+        tags = index_map[key][1]
+        accrued_expenses = self.bs_data.find_all(tags)[:2]
+
+        # now make a tuple out of the two lists
+        for total_liability, accrued_expense in zip(total_liabilities, accrued_expenses):
+            year = self.get_fiscal_year_by_context(total_liability["contextRef"])
+            total_liability = float(total_liability.text)
+            accrued_expense = float(accrued_expense.text)
+
+            current_liability = total_liability - accrued_expense
+            self.df.loc[SHORTTERM_LIABILITIES, year] = current_liability
+
+
+
     def set_current_assets(self):
         key = CURRENT_ASSETS
         tags = index_map[key][1]
@@ -308,6 +336,26 @@ class RechenknechtBeta:
         for current_asset in current_assets:
             year = self.get_fiscal_year_by_context(current_asset["contextRef"])
             self.df.loc[CURRENT_ASSETS, year] = float(current_asset.text)
+
+        if not current_assets:
+            self.calculate_current_assets()
+
+    def calculate_current_assets(self):
+        key = ACCOUNTS_RECEIVABLE
+        tags = index_map[key][1]
+        accounts_receivable = self.bs_data.find_all(tags)[:2]
+
+        key = CASH
+        tags = index_map[key][1]
+        cashs = self.bs_data.find_all(tags)[:2]
+
+        for account_receivable, cash in zip(accounts_receivable, cashs):
+            year = self.get_fiscal_year_by_context(account_receivable["contextRef"])
+            account_receivable = float(account_receivable.text)
+            cash = float(cash.text)
+
+            current_asset = account_receivable + cash
+            self.df.loc[CURRENT_ASSETS, year] = current_asset
 
     def set_longterm_liabilities(self):
         key = TOTAL_LIABILITIES
