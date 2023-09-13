@@ -121,26 +121,24 @@ class RechenknechtBeta:
         self.bs_data = document
 
     def set_number_of_shares(self):
-        # TAG: dei:EntityCommonStockSharesOutstanding
-        tag = "dei:EntityCommonStockSharesOutstanding"
-        shares = self.bs_data.find(tag)
-
-        if shares is None:
-            tag = "us-gaap:CommonStockSharesOutstanding"
-            shares = self.bs_data.find(tag).text
-        else:
-            shares = shares.text
-
-        fiscal_year = self.get_fiscal_year()
-        self.df.loc[NUMBER_OF_SHARES, fiscal_year] = int(shares)
+        tag = "us-gaap:WeightedAverageNumberOfSharesOutstandingBasic"
+        shares_outstanding = self.bs_data.find_all(tag)
+        for share in shares_outstanding:
+            try:
+                year = self.get_fiscal_year_by_context(share["contextRef"])
+                self.df.loc[NUMBER_OF_SHARES, year] = int(share.text)
+            except ValueError:
+                logger.debug(f"ValueError for {self.name} in {year}")
 
     def set_number_of_shares_diluted(self):
-        # TAG: dei:EntityCommonStockSharesOutstanding
         tag = "us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding"
-        shares = self.bs_data.find(tag).text
-
-        fiscal_year = self.get_fiscal_year()
-        self.df.loc[NUMBER_OF_SHARES_DILUTED, fiscal_year] = int(shares)
+        shares_outstanding = self.bs_data.find_all(tag)
+        for share in shares_outstanding:
+            try:
+                year = self.get_fiscal_year_by_context(share["contextRef"])
+                self.df.loc[NUMBER_OF_SHARES_DILUTED, year] = int(share.text)
+            except ValueError:
+                logger.debug(f"ValueError for {self.name} in {year}")
 
     def get_fiscal_year(self):
         fy = self.bs_data.find("dei:DocumentFiscalYearFocus")
