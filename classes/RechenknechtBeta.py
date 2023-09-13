@@ -16,7 +16,9 @@ import cProfile
 
 logger = logging.getLogger(__name__)
 
+#### KEYS FOR INDEX MAP ####
 KBGV = "KBGV"
+KGV = "KGV"
 RO_I = "RoI"
 TIER = "TIER"
 NUMBER_OF_SHARES_DILUTED = "number_of_shares_diluted"
@@ -40,6 +42,8 @@ RO_A = "RoA"
 BOOK_VALUE_PER_SHARE = "book_value_per_share"
 EPS = "EPS"
 DIVIDENDS_PER_SHARE = "dividends_per_share"
+TOTAL_LIABILITIES = "total_liabilities"
+#### KEYS FOR INDEX MAP ####
 
 index_map_path = pathlib.Path("./documents/rechenknecht_index_map.json").absolute()
 with open(index_map_path, "r") as f:
@@ -63,7 +67,7 @@ class RechenknechtBeta:
 
         self.bs_data: BeautifulSoup = None
 
-        values_to_calculate: list[str] = \
+        rows: list[str] = \
             [DIVIDENDS_PER_SHARE,
              EPS,
              BOOK_VALUE_PER_SHARE,
@@ -96,7 +100,7 @@ class RechenknechtBeta:
             year_parsed = year.split("-")[0]
             columns.append(year_parsed)
 
-        self.df = pd.DataFrame(index=values_to_calculate, columns=columns)
+        self.df = pd.DataFrame(index=rows, columns=columns)
 
         self.calculate()
 
@@ -128,7 +132,7 @@ class RechenknechtBeta:
             shares = shares.text
 
         fiscal_year = self.get_fiscal_year()
-        self.df.loc[NUMBER_OF_SHARES, fiscal_year] = shares
+        self.df.loc[NUMBER_OF_SHARES, fiscal_year] = int(shares)
 
     def set_number_of_shares_diluted(self):
         # TAG: dei:EntityCommonStockSharesOutstanding
@@ -136,7 +140,7 @@ class RechenknechtBeta:
         shares = self.bs_data.find(tag).text
 
         fiscal_year = self.get_fiscal_year()
-        self.df.loc[NUMBER_OF_SHARES_DILUTED, fiscal_year] = shares
+        self.df.loc[NUMBER_OF_SHARES_DILUTED, fiscal_year] = int(shares)
 
     def get_fiscal_year(self):
         fy = self.bs_data.find("dei:DocumentFiscalYearFocus")
@@ -148,11 +152,17 @@ class RechenknechtBeta:
         calculate all values for the dataframe for every year
         """
 
+        # First of all, go over all documents and set the data
         for path, year in self.file_list:
             year_parsed = year.split("-")[0]
             self.current_year = year_parsed
             self.set_document(path)
             self.set_data()
+
+        # Afterwards, we can calculate the ratios and averages
+        self.calculate_ratios()
+        self.clean()
+        self.calculate_averages_over_x_years(time_span=7)
 
     def set_data(self):
         self.set_number_of_shares()
@@ -160,6 +170,7 @@ class RechenknechtBeta:
         self.set_dividends()
 
         self.set_balance_sheet_data()
+        self.set_income_statement_data()
 
     def set_dividends(self):
         key = "dividends"
@@ -229,11 +240,21 @@ class RechenknechtBeta:
         self.set_intangible_assets()
         self.set_goodwill()
 
+    def set_income_statement_data(self):
         # INCOME STATEMENT
         self.set_revenue()
         self.set_operating_income()
         self.set_interest_expenses()
         self.set_net_income()
+
+    def calculate_ratios(self):
+        self.calculate_eps()
+        self.calculate_book_value_per_share()
+        self.calculate_roa()
+        self.calculate_EBIT_margin()
+        self.calculate_equity_ratio()
+        self.calculate_nettoumlaufvermoegen()
+        self.calculate_TIER()
 
     def set_total_equity(self):
         # total equity
@@ -270,12 +291,16 @@ class RechenknechtBeta:
             self.df.loc[CURRENT_ASSETS, year] = float(current_asset.text)
 
     def set_longterm_liabilities(self):
-        key = LONGTERM_LIABILITIES
+        key = TOTAL_LIABILITIES
         tags = index_map[key][1]
-        longterm_liabilities = self.bs_data.find_all(tags)
-        for longterm_liability in longterm_liabilities:
-            year = self.get_fiscal_year_by_context(longterm_liability["contextRef"])
-            self.df.loc[LONGTERM_LIABILITIES, year] = float(longterm_liability.text)
+        total_liabilities = self.bs_data.find_all(tags)
+
+        # Total liabilities saved in longterm-liabilities. And then subtract shortterm-liabilities
+        for total_liability in total_liabilities:
+            year = self.get_fiscal_year_by_context(total_liability["contextRef"])
+            self.df.loc[LONGTERM_LIABILITIES, year] = float(total_liability.text)
+            self.df.loc[LONGTERM_LIABILITIES, year] = self.df.loc[LONGTERM_LIABILITIES, year] - self.df.loc[
+                SHORTTERM_LIABILITIES, year]
 
     def set_goodwill(self):
         key = GOODWILL
@@ -386,3 +411,63 @@ class RechenknechtBeta:
             except ValueError:
                 logger.debug(msg=f"ValueError for {net_income}")
                 pass
+
+    def calculate_eps(self):
+        self.df.loc[EPS] = (self.df.loc[NET_INCOME] / self.df.loc[NUMBER_OF_SHARES_DILUTED])
+
+    def calculate_book_value_per_share(self):
+        self.df.loc[BOOK_VALUE_PER_SHARE] = self.df.loc[STOCKHOLDERS_EQUITY] / self.df.loc[NUMBER_OF_SHARES_DILUTED]
+
+        self.df.loc[CONSERVATIVE_BOOK_VALUE_PER_SHARE] = (self.df.loc[STOCKHOLDERS_EQUITY] - self.df.loc[GOODWILL] -
+                                                          self.df.loc[INTANGIBLE_ASSETS]) / self.df.loc[
+                                                             NUMBER_OF_SHARES_DILUTED]
+
+    def calculate_roa(self):
+        self.df.loc[RO_A] = ((self.df.loc[NET_INCOME] / self.df.loc[TOTAL_ASSETS]) * 100)
+
+    def calculate_roi(self):
+        self.df.loc[RO_I] = ((self.df.loc[EPS] / self.market_price) * 100)
+
+    def calculate_EBIT_margin(self):
+        self.df.loc[EBIT_MARGIN] = (self.df.loc[EBIT] / self.df.loc[REVENUE]) * 100
+
+    def calculate_equity_ratio(self):
+        self.df.loc[EQUITY_RATIO] = (self.df.loc[STOCKHOLDERS_EQUITY] / self.df.loc[TOTAL_ASSETS]) * 100
+
+    def calculate_nettoumlaufvermoegen(self):
+        self.df.loc[NETTOUMLAUFVERM_GEN] = (self.df.loc[CURRENT_ASSETS] - self.df.loc[SHORTTERM_LIABILITIES])
+
+    def calculate_averages_over_x_years(self, time_span=7):
+        """
+        Calculates the average of the last x years for each row in the dataframe.
+        :param time_span: The number of years to calculate the average over
+        """
+        AVG: str = f"{time_span}_YEAR_AVG"
+
+        for row in self.df.index:
+            last_x_years = self.df.loc[row].tail(time_span)
+            self.df.loc[row, AVG] = last_x_years.mean()
+
+        self.df.loc[RO_I, AVG] = self.df.loc[EPS, AVG] / self.market_price * 100
+
+        # use latest value of book value per share
+        # TODO KGV = 1 / RoI?
+        self.df.loc[KGV, AVG] = self.market_price / self.df.loc[EPS, AVG]
+
+        # [:, 0] means first column of the dataframe, which is the latest year
+        self.df.loc[BOOK_VALUE_PER_SHARE, AVG] = self.df.iloc[:, 0][BOOK_VALUE_PER_SHARE]  # use latest year
+        self.df.loc[CONSERVATIVE_BOOK_VALUE_PER_SHARE, AVG] = self.df.iloc[:, 0][CONSERVATIVE_BOOK_VALUE_PER_SHARE]  # use latest year
+        self.df.loc[KBGV, AVG] = (self.market_price / self.df.loc[CONSERVATIVE_BOOK_VALUE_PER_SHARE, AVG]) * \
+                                 self.df.loc[KGV, AVG]
+
+    def clean(self):
+        """
+        Removes all columns which are completely empty.
+
+        May be enhanced by removing rows that are completely empty?
+        May be enhanced by filling NaN values?
+        """
+        self.df = self.df.dropna(axis=1, how="all")
+
+    def calculate_TIER(self):
+        self.df.loc[TIER] = self.df.loc[EBIT] / self.df.loc[INTEREST_EXPENSE]
