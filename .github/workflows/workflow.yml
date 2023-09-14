@@ -40,5 +40,5 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
           name: test-artifacts
-          path: test/resources/filings/footlocker_actual.csv
+          path: test/
           if-no-files-found: error
