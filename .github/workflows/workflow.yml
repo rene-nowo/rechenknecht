@@ -8,6 +8,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest  # The type of virtual machine to use
+    defaults:
+        run:
+            working-directory: rechenknecht
 
     strategy:
       matrix:
@@ -37,4 +40,5 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
           name: test-artifacts
-          path: test/resources/filings/footlocker_actual.csv
+          path: rechenknecht/test/resources/filings/footlocker_actual.csv
+          if-no-files-found: error
