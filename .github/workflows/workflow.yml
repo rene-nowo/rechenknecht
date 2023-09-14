@@ -32,3 +32,14 @@ jobs:
     - name: Run Tests
       run: |
         poetry run pytest
+        
+
+    - name: Run edgar with foot_locker
+      run: |
+        poetry run app_edgar.py --ticker fl
+
+    - name: Upload Test Artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: test-artifacts
+          path: $GITHUB_WORKSPACE/documents/csv/FL.csv

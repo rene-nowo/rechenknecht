@@ -115,7 +115,7 @@ class RechenknechtBeta:
         self.calculate()
 
     def to_csv(self, path: pathlib.Path):
-        self.df.to_csv(f"{path}/{self.name}.csv")
+        self.df.to_csv(f"{path}/{self.ticker}.csv")
 
     def get_stock_price(self):
         stock_info = yf.Ticker(self.ticker)

@@ -1,11 +1,9 @@
 import pathlib
-import re
 from src.Edgar_api import EDGAR_API
 import pandas as pd
 from multiprocessing import Pool
 import argparse
 import logging
-import cProfile
 
 # Configure logging
 from src.RechenknechtBeta import RechenknechtBeta
@@ -46,12 +44,12 @@ def search_edgar_data(ticker: str):
     return None, None, None
 
 
-def analyze_company(ticker):
+def analyze_company(ticker, output_path: pathlib.Path):
     file_list, name, industry = search_edgar_data(ticker)
 
     if file_list is not None:
         rechner_beta = RechenknechtBeta(name, "", "USD", ticker, industry, file_list)
-        rechner_beta.to_csv(pathlib.Path("documents/csv"))
+        rechner_beta.to_csv(path=output_path)
 
         """
         # rechner = Rechenknecht(ticker)
@@ -124,13 +122,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--ticker", help="Ticker of the company to analyze", required=False)
     parser.add_argument("--all", help="Analyze all companies", required=False, action="store_true")
+
+    standard_output_path = (pathlib.Path(__file__).parent / "documents" / "csv").absolute()
+    parser.add_argument("--output_path", help="Output file", required=False, default=standard_output_path)
+
     args = parser.parse_args()
 
     ticker_map: str = "./ticker-cik_map.txt"
 
     if args.ticker:
-        # analyze_company(args.ticker)
-        cProfile.run('analyze_company(args.ticker)')
+        output_path = pathlib.Path(args.output_path).absolute()
+        analyze_company(ticker=args.ticker, output_path=output_path)
     elif args.all:
         df = pd.read_csv(
             ticker_map,
@@ -142,7 +144,7 @@ if __name__ == "__main__":
         analyze_all(ticker_list)
     else:
         # If no args are given, analyze Foot Locker
-        ticker_symbol = "pfe"
+        ticker_symbol = "fl"
         # ticker_symbol = "pfe"
         # cProfile.run('analyze_company(ticker_symbol)')
         analyze_company(ticker_symbol)
