@@ -40,5 +40,6 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
           name: test-artifacts
-          path: test/
+          path: test/resources
           if-no-files-found: error
+          retention-days: 14
