@@ -1,6 +1,6 @@
 import pathlib
 import re
-from classes.Edgar_api import EDGAR_API
+from src.Edgar_api import EDGAR_API
 import pandas as pd
 from multiprocessing import Pool
 import argparse
@@ -8,7 +8,7 @@ import logging
 import cProfile
 
 # Configure logging
-from classes.RechenknechtBeta import RechenknechtBeta
+from src.RechenknechtBeta import RechenknechtBeta
 
 logging.basicConfig(filename='./logs/' + __name__ + '.log', level=logging.DEBUG)
 

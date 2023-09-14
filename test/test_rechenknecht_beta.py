@@ -2,7 +2,7 @@ import pathlib
 import pytest
 
 from app_edgar import search_edgar_data
-from classes.RechenknechtBeta import RechenknechtBeta
+from src.RechenknechtBeta import RechenknechtBeta
 import pandas as pd
 import pandas.testing as pd_testing
 
