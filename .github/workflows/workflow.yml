@@ -37,4 +37,4 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
           name: test-artifacts
-          path: $GITHUB_WORKSPACE/test/resources/filings/footlocker_actual.csv
+          path: test/resources/filings/footlocker_actual.csv
