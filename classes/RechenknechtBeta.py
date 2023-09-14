@@ -17,10 +17,10 @@ import cProfile
 logger = logging.getLogger(__name__)
 
 #### KEYS FOR INDEX MAP ####
-CASH="cash"
-ACCOUNTS_RECEIVABLE="accounts_receivable"
-TOTAL_ASSETS="assets"
-KBGV_CONSERVATIVE="KGBV_conservative"
+CASH = "cash"
+ACCOUNTS_RECEIVABLE = "accounts_receivable"
+TOTAL_ASSETS = "assets"
+KBGV_CONSERVATIVE = "KGBV_conservative"
 KBGV = "KBGV"
 KGV = "KGV"
 RO_I = "RoI"
@@ -57,7 +57,6 @@ try:
         index_map = json.load(f)
 except FileNotFoundError:
     logger.error(f"Path {index_map_path} doesn't exist.")
-
 
 
 class RechenknechtBeta:
@@ -287,19 +286,16 @@ class RechenknechtBeta:
             year = self.get_fiscal_year_by_context(total_equity["contextRef"])
             total_equity = total_equity.text
 
-
             # So sometimes the key "Stockholders equity doesn't work, which means the first 2 values are empty strings ("")"
             # This means, we have to somehow adjust the function to get the correct value. The solution is:
             # Retry set_stockholders_equity with a higher limit. If it still doesn't work, then just skip it.
             if total_equity == "" and retry is True:
                 retry = False
-                self.set_stockholders_equity(limit=limit+2, retry=retry)
-
+                self.set_stockholders_equity(limit=limit + 2, retry=retry)
 
             # If the total_equity is still "", then just continue the loop
             if total_equity == "":
                 continue
-
 
             self.df.loc[STOCKHOLDERS_EQUITY, year] = float(total_equity)
 
@@ -332,8 +328,6 @@ class RechenknechtBeta:
 
             current_liability = total_liability - accrued_expense
             self.df.loc[SHORTTERM_LIABILITIES, year] = current_liability
-
-
 
     def set_current_assets(self):
         key = CURRENT_ASSETS
@@ -541,9 +535,11 @@ class RechenknechtBeta:
 
         # [:, 0] means first column of the dataframe, which is the latest year
         self.df.loc[BOOK_VALUE_PER_SHARE, AVG] = self.df.iloc[:, 0][BOOK_VALUE_PER_SHARE]  # use latest year
-        self.df.loc[CONSERVATIVE_BOOK_VALUE_PER_SHARE, AVG] = self.df.iloc[:, 0][CONSERVATIVE_BOOK_VALUE_PER_SHARE]  # use latest year
-        self.df.loc[KBGV_CONSERVATIVE, AVG] = (self.market_price / self.df.loc[CONSERVATIVE_BOOK_VALUE_PER_SHARE, AVG]) * \
-                                 self.df.loc[KGV, AVG]
+        self.df.loc[CONSERVATIVE_BOOK_VALUE_PER_SHARE, AVG] = self.df.iloc[:, 0][
+            CONSERVATIVE_BOOK_VALUE_PER_SHARE]  # use latest year
+        self.df.loc[KBGV_CONSERVATIVE, AVG] = (self.market_price / self.df.loc[
+            CONSERVATIVE_BOOK_VALUE_PER_SHARE, AVG]) * \
+                                              self.df.loc[KGV, AVG]
 
         self.df.loc[KBGV, AVG] = (self.market_price / self.df.loc[BOOK_VALUE_PER_SHARE, AVG]) * \
                                  self.df.loc[KGV, AVG]

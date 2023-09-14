@@ -96,6 +96,8 @@ def analyze_company(ticker):
                 rechner.calculate_returns(str(year))
 
         rechner.calculate_averages()"""
+    else:
+        raise ConnectionError("No data found for ticker " + ticker)
 
 
 def worker(ticker):
