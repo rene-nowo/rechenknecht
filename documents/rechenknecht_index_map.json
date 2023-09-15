@@ -17,7 +17,7 @@
         "us-gaap:Revenues"
         ]],
     "ebit":[13,["us-gaap:OperatingIncomeLoss", "us-gaap:IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest"]],
-    "interest_expense":[14,["us-gaap:InterestExpense","us-gaap:InterestIncomeExpenseNonoperatingNet"]],
+    "interest_expense":[14,["us-gaap:InterestExpense"]],
     "net_income":[15,["us-gaap:NetIncomeLoss"]],
     "tier":[16],
     "shares":[17, ["us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding","dei:EntityCommonStockSharesOutstanding"]],
@@ -26,5 +26,6 @@
     "accrued_expenses_and_accounts_payable": [20, ["us-gaap:AccountsPayableAndOtherAccruedLiabilities"]],
     "assets": [21, ["us-gaap:Assets"]],
     "cash" : [22, ["us-gaap:CashAndCashEquivalentsAtCarryingValue"]],
-    "accounts_receivable" : [23, ["us-gaap:AccountsReceivableNet"]]
+    "accounts_receivable" : [23, ["us-gaap:AccountsReceivableNet"]],
+    "interest_income_expense": [24, ["us-gaap:InterestIncomeExpenseNonoperatingNet"]]
 }

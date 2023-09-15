@@ -17,6 +17,7 @@ import cProfile
 logger = logging.getLogger(__name__)
 
 #### KEYS FOR INDEX MAP ####
+INTEREST_INCOME_EXPENSE = "interest_income_expense"
 CASH = "cash"
 ACCOUNTS_RECEIVABLE = "accounts_receivable"
 TOTAL_ASSETS = "assets"
@@ -104,14 +105,7 @@ class RechenknechtBeta:
              KBGV]
 
         self.file_list = file_list
-
-        columns: list[str] = []
-        for path, year in self.file_list:
-            year_parsed = year.split("-")[0]
-            columns.append(year_parsed)
-
-        self.df = pd.DataFrame(index=rows, columns=columns)
-
+        self.df = pd.DataFrame(index=rows)
         self.calculate()
 
     def to_csv(self, path: pathlib.Path):
@@ -126,8 +120,8 @@ class RechenknechtBeta:
         with open(
                 file_path,
                 "r",
-        ) as f:
-            data = f.read()
+        ) as filing:
+            data = filing.read()
         document: BeautifulSoup = BeautifulSoup(data, "xml")
         self.bs_data = document
 
@@ -188,8 +182,11 @@ class RechenknechtBeta:
         key = "dividends"
         tags = index_map[key][1]
         dividends = self.bs_data.find_all(tags)
+
+        # initiate row with 0, so that if there is no dividend, it is 0
+        self.df.loc[DIVIDENDS_PER_SHARE, :] = 0
         for dividend in dividends:
-            year, is_full_year = self.get_context_date(dividend["contextRef"])
+            year = self.get_fiscal_year_by_context(dividend["contextRef"])
             self.df.loc[DIVIDENDS_PER_SHARE, year] = float(dividend.text)
 
     def get_context_date(self, context_id):
@@ -374,11 +371,10 @@ class RechenknechtBeta:
         tags = index_map[key][1]
         goodwills = self.bs_data.find_all(tags)[:2]
 
+        # init with 0, because if there is no goodwill, the df would have NaN, which we don't want
+        self.df.loc[GOODWILL, :] = 0
         for goodwill in goodwills:
             year = self.get_fiscal_year_by_context(goodwill["contextRef"])
-
-            # init with 0, because if there is no intangible asset, the df would have NaN, which we don't want
-            self.df.loc[GOODWILL, year] = 0
 
             goodwill = float(goodwill.text)
             self.df.loc[GOODWILL, year] = goodwill
@@ -388,11 +384,10 @@ class RechenknechtBeta:
         tags = index_map[key][1]
         intangible_assets = self.bs_data.find_all(tags)[:2]
 
+        # init with 0, because if there is no intangible asset, the df would have NaN, which we don't want
+        self.df.loc[INTANGIBLE_ASSETS, :] = 0
         for intangible in intangible_assets:
             year = self.get_fiscal_year_by_context(intangible["contextRef"])
-
-            # init with 0, because if there is no intangible asset, the df would have NaN, which we don't want
-            self.df.loc[INTANGIBLE_ASSETS, year] = 0
 
             intangibles = float(intangible.text)
             self.df.loc[INTANGIBLE_ASSETS, year] = intangibles
@@ -433,7 +428,10 @@ class RechenknechtBeta:
 
             # instant date which should be checked to be the fiscal year set to start date bc. start date is within
             # the fiscal year of the company usually
-            instant_date = start
+            if fiscal_year_end_date.month <= 6:
+                instant_date = start
+            else:
+                instant_date = end
 
         return str(instant_date.year)
 
@@ -466,18 +464,31 @@ class RechenknechtBeta:
         tags = index_map[key][1]
         interest_expenses = self.bs_data.find_all(tags)[:3]
         for interest_expense in interest_expenses:
-            # Important. If interest expense is positive, set to zero, because nothing was paid, otherwise absolute value
-            if float(interest_expense.text) > 0:
-                expense = 0.0
-            else:
-                expense = abs(float(interest_expense.text))
-
+            expense = abs(float(interest_expense.text))
             try:
                 year = self.get_fiscal_year_by_context(interest_expense["contextRef"])
                 self.df.loc[INTEREST_EXPENSE, year] = expense
             except ValueError:
                 logger.debug(msg=f"ValueError for {interest_expense}")
                 pass
+
+        # If no Expenses were found, search for Income/Expense and filter for the expenses
+        if not interest_expenses:
+            key = INTEREST_INCOME_EXPENSE
+            tags = index_map[key][1]
+            interest_expenses = self.bs_data.find_all(tags)[:3]
+            for interest_expense in interest_expenses:
+                if float(interest_expense.text) > 0:
+                    expense = 0.0
+                else:
+                    expense = abs(float(interest_expense.text))
+
+                try:
+                    year = self.get_fiscal_year_by_context(interest_expense["contextRef"])
+                    self.df.loc[INTEREST_EXPENSE, year] = expense
+                except ValueError:
+                    logger.debug(msg=f"ValueError for {interest_expense}")
+                    pass
 
     def set_net_income(self):
         key = NET_INCOME
