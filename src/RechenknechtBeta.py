@@ -183,8 +183,6 @@ class RechenknechtBeta:
         tags = index_map[key][1]
         dividends = self.bs_data.find_all(tags)
 
-        # initiate row with 0, so that if there is no dividend, it is 0
-        self.df.loc[DIVIDENDS_PER_SHARE, :] = 0
         for dividend in dividends:
             year = self.get_fiscal_year_by_context(dividend["contextRef"])
             self.df.loc[DIVIDENDS_PER_SHARE, year] = float(dividend.text)
@@ -371,8 +369,6 @@ class RechenknechtBeta:
         tags = index_map[key][1]
         goodwills = self.bs_data.find_all(tags)[:2]
 
-        # init with 0, because if there is no goodwill, the df would have NaN, which we don't want
-        self.df.loc[GOODWILL, :] = 0
         for goodwill in goodwills:
             year = self.get_fiscal_year_by_context(goodwill["contextRef"])
 
@@ -384,8 +380,6 @@ class RechenknechtBeta:
         tags = index_map[key][1]
         intangible_assets = self.bs_data.find_all(tags)[:2]
 
-        # init with 0, because if there is no intangible asset, the df would have NaN, which we don't want
-        self.df.loc[INTANGIBLE_ASSETS, :] = 0
         for intangible in intangible_assets:
             year = self.get_fiscal_year_by_context(intangible["contextRef"])
 
@@ -563,6 +557,17 @@ class RechenknechtBeta:
         May be enhanced by filling NaN values?
         """
         self.df = self.df.dropna(axis=1, how="all")
+
+        # fill empty values with 0
+        for year in self.df.columns:
+            if self.df.loc[DIVIDENDS_PER_SHARE, year] == "":
+                self.df.loc[DIVIDENDS_PER_SHARE, year] = 0
+
+            if self.df.loc[GOODWILL, year] == "":
+                self.df.loc[GOODWILL, year] = 0
+
+            if self.df.loc[INTANGIBLE_ASSETS, year] == "":
+                self.df.loc[INTANGIBLE_ASSETS, year] = 0
 
     def calculate_TIER(self):
         rounding_factor: float = 0.0000000001
