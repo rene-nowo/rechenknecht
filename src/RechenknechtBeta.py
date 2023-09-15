@@ -7,13 +7,12 @@ from bs4 import BeautifulSoup
 import re
 import yfinance as yf
 import json
-from datetime import datetime, timedelta
-from dateutil.relativedelta import relativedelta
-import math
-import cProfile
+from datetime import datetime
+from colorama import Fore, Style
 
 # in dem dokument sind alle tags und indexes für die analyse zu finden
 
+logging.basicConfig(filename='./logs/' + __name__ + '.log', level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 #### KEYS FOR INDEX MAP ####
@@ -65,7 +64,7 @@ class RechenknechtBeta:
                  log_level=logging.DEBUG):
         logger.setLevel(log_level)
 
-        print(f"RECHENKNECHTBETA CALLED at {name}")
+        print(f"RECHENKNECHTBETA CALLED at {Fore.BLUE}{name}{Style.RESET_ALL}")
         # initial field values to work with.
         self.current_year = None
         self.market_price = None
@@ -107,6 +106,10 @@ class RechenknechtBeta:
         self.file_list = file_list
         self.df = pd.DataFrame(index=rows)
         self.calculate()
+
+        if self.df.loc[RO_I, "7_YEAR_AVG"] > 10:
+            print(f"{Fore.GREEN}{self.name} is a candidate with RoI of {self.df.loc[RO_I, '7_YEAR_AVG']}")
+            print(Style.RESET_ALL)
 
     def to_csv(self, path: pathlib.Path):
         self.df.to_csv(f"{path}/{self.ticker}.csv")
@@ -185,8 +188,11 @@ class RechenknechtBeta:
         dividends = self.bs_data.find_all(tags)
 
         for dividend in dividends:
-            year = self.get_fiscal_year_by_context(dividend["contextRef"])
-            self.df.loc[DIVIDENDS_PER_SHARE, year] = float(dividend.text)
+            try:
+                year = self.get_fiscal_year_by_context(dividend["contextRef"])
+                self.df.loc[DIVIDENDS_PER_SHARE, year] = float(dividend.text)
+            except ValueError:
+                logger.debug(f"ValueError for {self.name} for {key}")
 
     def get_context_date(self, context_id):
         context = self.bs_data.find(id=context_id)
@@ -418,7 +424,7 @@ class RechenknechtBeta:
 
             delta = (end - start).days
             if int(delta) < 350:
-                logger.debug(f"No whole Year: {start} - {end}. Delta: {delta}")
+                logger.debug(f"No whole Year: {start} - {end}. Delta: {delta}. ContextID: {contextid}")
                 raise ValueError(f"No whole Year: {start} - {end}")
 
             # instant date which should be checked to be the fiscal year set to start date bc. start date is within
@@ -442,7 +448,7 @@ class RechenknechtBeta:
 
         key = REVENUE
         tags = index_map[key][1]
-        revenues = self.bs_data.find_all(tags)
+        revenues = self.bs_data.find_all(tags)[:3]
         for revenue in revenues:
             try:
                 year = self.get_fiscal_year_by_context(revenue["contextRef"])
@@ -567,6 +573,7 @@ class RechenknechtBeta:
         May be enhanced by filling NaN values?
         """
         self.df = self.df.dropna(axis=1, how="all")
+        #self.df = self.df.loc[:, (self.df != 0).any(axis=0)]
 
     def calculate_TIER(self):
         rounding_factor: float = 0.0000000001
@@ -574,15 +581,13 @@ class RechenknechtBeta:
 
     def nan_to_zero(self):
         # fill empty values with 0
+        def set_to_zero(key, year_col):
+            if self.df.loc[key, year_col] == "" or pd.isna(self.df.loc[key, year_col]):
+                logger.debug(msg=f"{key} is empty for year {year_col}")
+                self.df.loc[key, year_col] = 0
+
         for year in self.df.columns:
-            if self.df.loc[DIVIDENDS_PER_SHARE, year] == "" or pd.isna(self.df.loc[DIVIDENDS_PER_SHARE, year]):
-                logger.debug(msg=f"Dividends per share is empty for year {year}")
-                self.df.loc[DIVIDENDS_PER_SHARE, year] = 0
-
-            if self.df.loc[GOODWILL, year] == "" or pd.isna(self.df.loc[GOODWILL, year]):
-                logger.debug(msg=f"Goodwill is empty for year {year}")
-                self.df.loc[GOODWILL, year] = 0
-
-            if self.df.loc[INTANGIBLE_ASSETS, year] == "" or pd.isna(self.df.loc[INTANGIBLE_ASSETS, year]):
-                logger.debug(msg=f"Intangible assets is empty for year {year}")
-                self.df.loc[INTANGIBLE_ASSETS, year] = 0
+            set_to_zero(DIVIDENDS_PER_SHARE, year)
+            set_to_zero(GOODWILL, year)
+            set_to_zero(INTANGIBLE_ASSETS, year)
+            set_to_zero(INTEREST_EXPENSE, year)

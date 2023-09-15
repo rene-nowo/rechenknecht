@@ -11,4 +11,7 @@ Some filings are still submitted in paper and are not accessible through EDGAR. 
 Unternehmenssuche
 https://www.sec.gov/edgar/searchedgar/companysearch
 
+
+https://xbrl.us/data-rule/guid-tag/
+
 491

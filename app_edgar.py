@@ -1,4 +1,6 @@
 import pathlib
+import time
+
 from src.Edgar_api import EDGAR_API
 import pandas as pd
 from multiprocessing import Pool
@@ -121,6 +123,7 @@ if __name__ == "__main__":
     # Read the CSV file into a DataFrame
     parser = argparse.ArgumentParser()
     parser.add_argument("--ticker", help="Ticker of the company to analyze", required=False)
+    parser.add_argument("--tickers", help="Several comma-separated tickers to analyze", required=False)
     parser.add_argument("--all", help="Analyze all companies", required=False, action="store_true")
 
     standard_output_path = (pathlib.Path(__file__).parent / "documents" / "csv").absolute()
@@ -130,9 +133,18 @@ if __name__ == "__main__":
 
     ticker_map: str = "./ticker-cik_map.txt"
 
+    output_path = pathlib.Path(args.output_path)
     if args.ticker:
-        output_path = pathlib.Path(args.output_path).absolute()
         analyze_company(ticker=args.ticker, output_path=output_path)
+    elif args.tickers:
+        ticker_list = args.tickers.split(",")
+        for ticker in ticker_list:
+            analyze_company(ticker=ticker, output_path=output_path)
+
+            waiting_time: int = 10
+            for i in range(waiting_time):
+                print(f"next company in {waiting_time-i}")
+                time.sleep(1)
     elif args.all:
         df = pd.read_csv(
             ticker_map,
