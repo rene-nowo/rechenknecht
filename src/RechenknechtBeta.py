@@ -166,8 +166,9 @@ class RechenknechtBeta:
             self.set_data()
 
         # Afterwards, we can calculate the ratios and averages
-        self.calculate_ratios()
+        self.nan_to_zero()
         self.clean()
+        self.calculate_ratios()
         self.calculate_averages_over_x_years(time_span=7)
 
     def set_data(self):
@@ -430,9 +431,18 @@ class RechenknechtBeta:
         return str(instant_date.year)
 
     def set_revenue(self):
+        """
+        Sets the revenue for the current year. \n
+        The revenue is saved in the index_map with the key "Revenue". \n
+        The revenue is saved in the dataframe with the key "REVENUE". \n
+        The revenue is saved in the dataframe with the year as column name. \n
+
+        TODO IMPORTANT: Some revenue might be split up in the XML which means we have to determine the correct one.
+        """
+
         key = REVENUE
         tags = index_map[key][1]
-        revenues = self.bs_data.find_all(tags)[:3]
+        revenues = self.bs_data.find_all(tags)
         for revenue in revenues:
             try:
                 year = self.get_fiscal_year_by_context(revenue["contextRef"])
@@ -558,17 +568,21 @@ class RechenknechtBeta:
         """
         self.df = self.df.dropna(axis=1, how="all")
 
-        # fill empty values with 0
-        for year in self.df.columns:
-            if self.df.loc[DIVIDENDS_PER_SHARE, year] == "" or pd.isna(self.df.loc[DIVIDENDS_PER_SHARE, year]):
-                self.df.loc[DIVIDENDS_PER_SHARE, year] = 0
-
-            if self.df.loc[GOODWILL, year] == "" or pd.isna(self.df.loc[GOODWILL, year]):
-                self.df.loc[GOODWILL, year] = 0
-
-            if self.df.loc[INTANGIBLE_ASSETS, year] == "" or pd.isna(self.df.loc[INTANGIBLE_ASSETS, year]):
-                self.df.loc[INTANGIBLE_ASSETS, year] = 0
-
     def calculate_TIER(self):
         rounding_factor: float = 0.0000000001
         self.df.loc[TIER] = self.df.loc[EBIT] / (self.df.loc[INTEREST_EXPENSE] + rounding_factor)
+
+    def nan_to_zero(self):
+        # fill empty values with 0
+        for year in self.df.columns:
+            if self.df.loc[DIVIDENDS_PER_SHARE, year] == "" or pd.isna(self.df.loc[DIVIDENDS_PER_SHARE, year]):
+                logger.debug(msg=f"Dividends per share is empty for year {year}")
+                self.df.loc[DIVIDENDS_PER_SHARE, year] = 0
+
+            if self.df.loc[GOODWILL, year] == "" or pd.isna(self.df.loc[GOODWILL, year]):
+                logger.debug(msg=f"Goodwill is empty for year {year}")
+                self.df.loc[GOODWILL, year] = 0
+
+            if self.df.loc[INTANGIBLE_ASSETS, year] == "" or pd.isna(self.df.loc[INTANGIBLE_ASSETS, year]):
+                logger.debug(msg=f"Intangible assets is empty for year {year}")
+                self.df.loc[INTANGIBLE_ASSETS, year] = 0
