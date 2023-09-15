@@ -560,13 +560,13 @@ class RechenknechtBeta:
 
         # fill empty values with 0
         for year in self.df.columns:
-            if self.df.loc[DIVIDENDS_PER_SHARE, year] == "":
+            if self.df.loc[DIVIDENDS_PER_SHARE, year] == "" or pd.isna(self.df.loc[DIVIDENDS_PER_SHARE, year]):
                 self.df.loc[DIVIDENDS_PER_SHARE, year] = 0
 
-            if self.df.loc[GOODWILL, year] == "":
+            if self.df.loc[GOODWILL, year] == "" or pd.isna(self.df.loc[GOODWILL, year]):
                 self.df.loc[GOODWILL, year] = 0
 
-            if self.df.loc[INTANGIBLE_ASSETS, year] == "":
+            if self.df.loc[INTANGIBLE_ASSETS, year] == "" or pd.isna(self.df.loc[INTANGIBLE_ASSETS, year]):
                 self.df.loc[INTANGIBLE_ASSETS, year] = 0
 
     def calculate_TIER(self):
