@@ -16,6 +16,9 @@ logging.basicConfig(filename='./logs/' + __name__ + '.log', level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 #### KEYS FOR INDEX MAP ####
+FREE_CASH_FLOW = 'free_cash_flow'
+CAPEX = "capex"
+OPERATING_CASH_FLOW = "operating_cash_flow"
 INTEREST_INCOME_EXPENSE = "interest_income_expense"
 CASH = "cash"
 ACCOUNTS_RECEIVABLE = "accounts_receivable"
@@ -107,8 +110,19 @@ class RechenknechtBeta:
         self.df = pd.DataFrame(index=rows)
         self.calculate()
 
-        if self.df.loc[RO_I, "7_YEAR_AVG"] > 10:
-            print(f"{Fore.GREEN}{self.name} is a candidate with RoI of {self.df.loc[RO_I, '7_YEAR_AVG']}")
+        self.print_extraordinary_results()
+
+    def print_extraordinary_results(self):
+        if self.df.loc[RO_I, "7_YEAR_AVG"] > 8:
+            print(f"{Fore.GREEN}{self.name} is a candidate with RoI of {self.df.loc[RO_I, '7_YEAR_AVG']}%")
+        if self.df.loc[RO_A, "7_YEAR_AVG"] > 8:
+            print(f"{Fore.GREEN}{self.name} is a candidate with RoA of {self.df.loc[RO_A, '7_YEAR_AVG']}%")
+        if self.df.loc[EBIT_MARGIN, "7_YEAR_AVG"] > 13:
+            print(f"{Fore.GREEN}{self.name} is a candidate with EBIT-margin of {self.df.loc[EBIT_MARGIN, '7_YEAR_AVG']}%")
+        if self.df.loc[EQUITY_RATIO, "7_YEAR_AVG"] > 35:
+            print(f"{Fore.GREEN}{self.name} is a candidate with equity-ratio of {self.df.loc[EQUITY_RATIO, '7_YEAR_AVG']}%")
+        if self.df.loc[KBGV, "7_YEAR_AVG"] < 10:
+            print(f"{Fore.GREEN}{self.name} is a candidate with KBGV of {self.df.loc[KBGV, '7_YEAR_AVG']}")
             print(Style.RESET_ALL)
 
     def to_csv(self, path: pathlib.Path):
@@ -174,6 +188,9 @@ class RechenknechtBeta:
         self.calculate_ratios()
         self.calculate_averages_over_x_years(time_span=7)
 
+        # We cant 2 comma precision only
+        self.df = self.df.round(decimals=2)
+
     def set_data(self):
         self.set_number_of_shares()
         self.set_number_of_shares_diluted()
@@ -181,6 +198,7 @@ class RechenknechtBeta:
 
         self.set_balance_sheet_data()
         self.set_income_statement_data()
+        self.set_cash_flow_statement_data()
 
     def set_dividends(self):
         key = "dividends"
@@ -269,6 +287,7 @@ class RechenknechtBeta:
         self.calculate_equity_ratio()
         self.calculate_nettoumlaufvermoegen()
         self.calculate_TIER()
+        self.calculate_free_cash_flow()
 
     def set_total_equity(self):
         # total equity
@@ -364,6 +383,10 @@ class RechenknechtBeta:
         tags = index_map[key][1]
         total_liabilities = self.bs_data.find_all(tags)[:2]
 
+        if not total_liabilities:
+            #TODO calculate by other means
+            logger.error("No total liabilities found. Please implement a way to calculate them.")
+
         # Total liabilities saved in longterm-liabilities. And then subtract shortterm-liabilities
         for total_liability in total_liabilities:
             year = self.get_fiscal_year_by_context(total_liability["contextRef"])
@@ -448,14 +471,18 @@ class RechenknechtBeta:
 
         key = REVENUE
         tags = index_map[key][1]
-        revenues = self.bs_data.find_all(tags)[:3]
+        revenues = self.bs_data.find_all(tags)[:9]
+        # TODO filter segments
         for revenue in revenues:
-            try:
-                year = self.get_fiscal_year_by_context(revenue["contextRef"])
-                self.df.loc[REVENUE, year] = float(revenue.text)
-            except ValueError:
-                logger.debug(msg=f"ValueError for {revenue}")
-                pass
+            ctx = self.bs_data.find(id=revenue["contextRef"])
+            segments = ctx.find_all("segment")
+            if not segments:
+                try:
+                    year = self.get_fiscal_year_by_context(revenue["contextRef"])
+                    self.df.loc[REVENUE, year] = float(revenue.text)
+                except ValueError:
+                    logger.debug(msg=f"ValueError for {revenue}")
+                    pass
 
     def set_operating_income(self):
         key = EBIT
@@ -510,6 +537,30 @@ class RechenknechtBeta:
                 self.df.loc[NET_INCOME, year] = float(net_income.text)
             except ValueError:
                 logger.debug(msg=f"ValueError for {net_income}")
+                pass
+
+    def set_operating_cash_flow(self):
+        key = OPERATING_CASH_FLOW
+        tags = index_map[key][1]
+        operating_cash_flows = self.bs_data.find_all(tags)[:3]
+        for operating_cash_flow in operating_cash_flows:
+            try:
+                year = self.get_fiscal_year_by_context(operating_cash_flow["contextRef"])
+                self.df.loc[OPERATING_CASH_FLOW, year] = float(operating_cash_flow.text)
+            except ValueError:
+                logger.debug(msg=f"ValueError for {operating_cash_flow}")
+                pass
+
+    def set_capex(self):
+        key = CAPEX
+        tags = index_map[key][1]
+        capexs = self.bs_data.find_all(tags)[:3]
+        for capex in capexs:
+            try:
+                year = self.get_fiscal_year_by_context(capex["contextRef"])
+                self.df.loc[CAPEX, year] = float(capex.text)
+            except ValueError:
+                logger.debug(msg=f"ValueError for {capex}")
                 pass
 
     def calculate_eps(self):
@@ -591,3 +642,10 @@ class RechenknechtBeta:
             set_to_zero(GOODWILL, year)
             set_to_zero(INTANGIBLE_ASSETS, year)
             set_to_zero(INTEREST_EXPENSE, year)
+
+    def set_cash_flow_statement_data(self):
+        self.set_operating_cash_flow()
+        self.set_capex()
+
+    def calculate_free_cash_flow(self):
+        self.df.loc[FREE_CASH_FLOW] = self.df.loc[OPERATING_CASH_FLOW] - self.df.loc[CAPEX]
