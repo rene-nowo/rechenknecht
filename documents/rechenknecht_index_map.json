@@ -29,5 +29,5 @@
     "accounts_receivable" : [23, ["us-gaap:AccountsReceivableNet"]],
     "interest_income_expense": [24, ["us-gaap:InterestIncomeExpenseNonoperatingNet"]],
     "operating_cash_flow": [25, ["us-gaap:NetCashProvidedByUsedInOperatingActivities"]],
-    "capex": [26, ["us-gaap:PaymentsToAcquirePropertyPlantAndEquipment"]]
+    "capex": [26, ["us-gaap:PaymentsToAcquirePropertyPlantAndEquipment", "us-gaap:PaymentsToAcquireProductiveAssets"]]
 }

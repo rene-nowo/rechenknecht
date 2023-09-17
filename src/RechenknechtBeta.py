@@ -642,6 +642,8 @@ class RechenknechtBeta:
             set_to_zero(GOODWILL, year)
             set_to_zero(INTANGIBLE_ASSETS, year)
             set_to_zero(INTEREST_EXPENSE, year)
+            set_to_zero(CAPEX, year)
+            set_to_zero(OPERATING_CASH_FLOW, year)
 
     def set_cash_flow_statement_data(self):
         self.set_operating_cash_flow()
