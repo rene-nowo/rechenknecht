@@ -28,5 +28,5 @@
     "operating_cash_flow": [25, ["us-gaap:NetCashProvidedByUsedInOperatingActivities"]],
     "capex": [26, ["us-gaap:PaymentsToAcquirePropertyPlantAndEquipment", "us-gaap:PaymentsToAcquireProductiveAssets"]],
     "revenue_automotive": [27, ["TODO - revenue_automotive?"]],
-    "revenue_customer": [28, ["us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax"]]
+    "revenue_customer": [28, ["us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax", "RevenueFromContractWithCustomerIncludingAssessedTax"]]
 }
