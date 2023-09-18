@@ -31,6 +31,14 @@ class DatabaseXML:
                 break
             yield dict(zip(columns, row))
 
+    def store_results(self, ticker, last_stock_price, last_book_value, kbgv, kgv, eps, roi, div_rate, equity_ratio, roa, ebit_margin, free_cash_flow_ratio, currency="USD", ev_ebit_ratio=0, rv_ebit_ratio=0):
+        query = """INSERT INTO results 
+                (ticker, last_stock_price, last_book_value, kbgv, kgv, eps, roi, div_rate, equity_ratio, roa, ebit_margin, free_cash_flow_ratio, currency, ev_ebit_ratio, rv_ebit_ratio) 
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
+        
+        self.cursor.execute(query, (ticker, last_stock_price, last_book_value, kbgv, kgv, eps, roi, div_rate, equity_ratio, roa, ebit_margin, free_cash_flow_ratio, currency, ev_ebit_ratio, rv_ebit_ratio))
+        self.conn.commit()
+
 
 
 
