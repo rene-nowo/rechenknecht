@@ -5,7 +5,13 @@ import json
 import pandas as pd
 import os
 
+import DBConnector
+
 file_path = pathlib.Path(__file__).parent.parent / "filings"
+
+with open("../db.json", "r") as f:
+    data = json.load(f)
+    print(data)
 
 
 def generate_cik_format(cik: str):
@@ -28,6 +34,11 @@ class EDGAR_API:
     use get_file to download one specific file at a time
     
     """
+
+    """
+    database connection
+    """
+    db_con = DBConnector.DatabaseXML(data["host"], data["user"], data["pw"], data["user"])
 
     def __init__(self) -> None:
         self.df = None
@@ -77,7 +88,6 @@ class EDGAR_API:
         if not os.path.exists(file_path_to_use):
             # https://www.sec.gov/ix?doc=/Archives/edgar/data/4127/0000004127-19-000049/fy1910k92719.htm
             url = f"https://www.sec.gov/Archives/edgar/data/{self.cik}/{accession_number.replace('-', '')}/{primary_document}"
-            print(url)
             #  BEISPIEL für XML url = "https://www.sec.gov/Archives/edgar/data/4127/000000412721000058/swks-20211001_htm.xml"
             url = f"https://www.sec.gov/Archives/edgar/data/{self.cik}/{accession_number.replace('-', '')}/{str(primary_document).replace('.htm', '_htm.xml')}"
 

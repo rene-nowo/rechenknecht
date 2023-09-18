@@ -10,10 +10,21 @@ import logging
 # Configure logging
 from src.RechenknechtBeta import RechenknechtBeta
 
+# Database connection
+import json
+from src.DBConnector import DatabaseXML
+
 logging.basicConfig(filename='./logs/' + __name__ + '.log', level=logging.DEBUG)
 
 edgar = EDGAR_API()
+"""
+database connection
+"""
+with open("../db.json", "r") as f:
+    data = json.load(f)
+    print(data)
 
+db_con = DatabaseXML(data["host"], data["user"], data["pw"], data["user"])
 
 def search_edgar_data(ticker: str):
     # first get all documents (form 10-K) from last years and safe them in a proper folder
@@ -131,7 +142,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    ticker_map: str = "./ticker-cik_map.txt"
+    ticker_map: str = "./maps/ticker-cik_map.txt"
 
     output_path = pathlib.Path(args.output_path)
     if args.ticker:
@@ -153,7 +164,17 @@ if __name__ == "__main__":
             sep="\t",
         )
         ticker_list = list(df["Ticker"][:100])
-        analyze_all(ticker_list)
+
+        for i in range(len(df)):
+            try:
+                analyze_company(ticker=df["Ticker"][i], output_path=output_path)
+
+                waiting_time: int = 10
+                for i in range(waiting_time):
+                    print(f"next company in {waiting_time-i}")
+                    time.sleep(1)
+            except Exception:
+                pass
     else:
         # If no args are given, analyze Foot Locker
         ticker_symbol = "fl"

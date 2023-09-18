@@ -650,4 +650,7 @@ class RechenknechtBeta:
         self.set_capex()
 
     def calculate_free_cash_flow(self):
-        self.df.loc[FREE_CASH_FLOW] = self.df.loc[OPERATING_CASH_FLOW] - self.df.loc[CAPEX]
+        try:
+            self.df.loc[FREE_CASH_FLOW] = self.df.loc[OPERATING_CASH_FLOW] - self.df.loc[CAPEX]
+        except KeyError:
+            logging.error("Key Free Cash Flow not found!")
