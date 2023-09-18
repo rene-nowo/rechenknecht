@@ -1,13 +1,11 @@
+import json
 import logging
 import pathlib
-from xmlrpc.client import Boolean
-import pandas as pd
-import xml
-from bs4 import BeautifulSoup
-import re
-import yfinance as yf
-import json
 from datetime import datetime
+
+import pandas as pd
+import yfinance as yf
+from bs4 import BeautifulSoup
 from colorama import Fore, Style
 
 # in dem dokument sind alle tags und indexes für die analyse zu finden
@@ -16,6 +14,7 @@ logging.basicConfig(filename='./logs/' + __name__ + '.log', level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 #### KEYS FOR INDEX MAP ####
+REVENUE_CUSTOMER = "revenue_customer"
 FREE_CASH_FLOW = 'free_cash_flow'
 CAPEX = "capex"
 OPERATING_CASH_FLOW = "operating_cash_flow"
@@ -118,9 +117,11 @@ class RechenknechtBeta:
         if self.df.loc[RO_A, "7_YEAR_AVG"] > 8:
             print(f"{Fore.GREEN}{self.name} is a candidate with RoA of {self.df.loc[RO_A, '7_YEAR_AVG']}%")
         if self.df.loc[EBIT_MARGIN, "7_YEAR_AVG"] > 13:
-            print(f"{Fore.GREEN}{self.name} is a candidate with EBIT-margin of {self.df.loc[EBIT_MARGIN, '7_YEAR_AVG']}%")
+            print(
+                f"{Fore.GREEN}{self.name} is a candidate with EBIT-margin of {self.df.loc[EBIT_MARGIN, '7_YEAR_AVG']}%")
         if self.df.loc[EQUITY_RATIO, "7_YEAR_AVG"] > 35:
-            print(f"{Fore.GREEN}{self.name} is a candidate with equity-ratio of {self.df.loc[EQUITY_RATIO, '7_YEAR_AVG']}%")
+            print(
+                f"{Fore.GREEN}{self.name} is a candidate with equity-ratio of {self.df.loc[EQUITY_RATIO, '7_YEAR_AVG']}%")
         if self.df.loc[KBGV, "7_YEAR_AVG"] < 10:
             print(f"{Fore.GREEN}{self.name} is a candidate with KBGV of {self.df.loc[KBGV, '7_YEAR_AVG']}")
             print(Style.RESET_ALL)
@@ -294,6 +295,10 @@ class RechenknechtBeta:
         key = TOTAL_ASSETS
         tags = index_map[key][1]
         total_equities = self.bs_data.find_all(tags)[:2]
+
+        if not total_equities:
+            logger.warning("No total_equities found")
+
         for total_equity in total_equities:
             year = self.get_fiscal_year_by_context(total_equity["contextRef"])
             self.df.loc[TOTAL_ASSETS, year] = float(total_equity.text)
@@ -303,6 +308,10 @@ class RechenknechtBeta:
         key = STOCKHOLDERS_EQUITY
         tags = index_map[key][1]
         total_equities = self.bs_data.find_all(tags)[:limit]
+
+        if not total_equities:
+            logger.warning("No total_equities found in set_stockholders_equity")
+
         for total_equity in total_equities:
             year = self.get_fiscal_year_by_context(total_equity["contextRef"])
             total_equity = total_equity.text
@@ -384,8 +393,8 @@ class RechenknechtBeta:
         total_liabilities = self.bs_data.find_all(tags)[:2]
 
         if not total_liabilities:
-            #TODO calculate by other means
-            logger.error("No total liabilities found. Please implement a way to calculate them.")
+            # TODO calculate by other means
+            logger.warning("No total liabilities found. Please implement a way to calculate them.")
 
         # Total liabilities saved in longterm-liabilities. And then subtract shortterm-liabilities
         for total_liability in total_liabilities:
@@ -399,6 +408,9 @@ class RechenknechtBeta:
         tags = index_map[key][1]
         goodwills = self.bs_data.find_all(tags)[:2]
 
+        if not goodwills:
+            logger.warning("No goodwill found. Please implement a way to calculate them.")
+
         for goodwill in goodwills:
             year = self.get_fiscal_year_by_context(goodwill["contextRef"])
 
@@ -409,6 +421,9 @@ class RechenknechtBeta:
         key = INTANGIBLE_ASSETS
         tags = index_map[key][1]
         intangible_assets = self.bs_data.find_all(tags)[:2]
+
+        if not intangible_assets:
+            logger.warning("No intangible assets found. Please implement a way to calculate them.")
 
         for intangible in intangible_assets:
             year = self.get_fiscal_year_by_context(intangible["contextRef"])
@@ -465,17 +480,28 @@ class RechenknechtBeta:
         The revenue is saved in the index_map with the key "Revenue". \n
         The revenue is saved in the dataframe with the key "REVENUE". \n
         The revenue is saved in the dataframe with the year as column name. \n
-
-        TODO IMPORTANT: Some revenue might be split up in the XML which means we have to determine the correct one.
         """
 
         key = REVENUE
         tags = index_map[key][1]
         revenues = self.bs_data.find_all(tags)[:9]
-        # TODO filter segments
+
+        # Try other key
+        if not revenues:
+            key = REVENUE_CUSTOMER
+            tags = index_map[key][1]
+            revenues = self.bs_data.find_all(tags)[:9]
+
+        if not revenues:
+            logger.warning("No revenues found. Please implement a way to calculate them.")
+
         for revenue in revenues:
+
+            # We need to filter out the segments, because they represent special items in the revenues, like
+            # revenues of sales, revenues of services, etc. We only want the total revenue.
             ctx = self.bs_data.find(id=revenue["contextRef"])
             segments = ctx.find_all("segment")
+
             if not segments:
                 try:
                     year = self.get_fiscal_year_by_context(revenue["contextRef"])
@@ -488,6 +514,10 @@ class RechenknechtBeta:
         key = EBIT
         tags = index_map[key][1]
         operating_incomes = self.bs_data.find_all(tags)[:3]
+
+        if not operating_incomes:
+            logger.warning("No operating incomes found. Please implement a way to calculate them.")
+
         for operating_income in operating_incomes:
             try:
                 year = self.get_fiscal_year_by_context(operating_income["contextRef"])
@@ -500,6 +530,7 @@ class RechenknechtBeta:
         key = INTEREST_EXPENSE
         tags = index_map[key][1]
         interest_expenses = self.bs_data.find_all(tags)[:3]
+
         for interest_expense in interest_expenses:
             expense = abs(float(interest_expense.text))
             try:
@@ -531,6 +562,10 @@ class RechenknechtBeta:
         key = NET_INCOME
         tags = index_map[key][1]
         net_incomes = self.bs_data.find_all(tags)[:3]
+
+        if not net_incomes:
+            logger.warning("No net incomes found. Please implement a way to calculate them.")
+
         for net_income in net_incomes:
             try:
                 year = self.get_fiscal_year_by_context(net_income["contextRef"])
@@ -543,6 +578,10 @@ class RechenknechtBeta:
         key = OPERATING_CASH_FLOW
         tags = index_map[key][1]
         operating_cash_flows = self.bs_data.find_all(tags)[:3]
+
+        if not operating_cash_flows:
+            logger.warning("No operating cash flows found. Please implement a way to calculate them.")
+
         for operating_cash_flow in operating_cash_flows:
             try:
                 year = self.get_fiscal_year_by_context(operating_cash_flow["contextRef"])
@@ -555,6 +594,10 @@ class RechenknechtBeta:
         key = CAPEX
         tags = index_map[key][1]
         capexs = self.bs_data.find_all(tags)[:3]
+
+        if not capexs:
+            logger.warning("No capexs found. Please implement a way to calculate them.")
+
         for capex in capexs:
             try:
                 year = self.get_fiscal_year_by_context(capex["contextRef"])
@@ -624,7 +667,7 @@ class RechenknechtBeta:
         May be enhanced by filling NaN values?
         """
         self.df = self.df.dropna(axis=1, how="all")
-        #self.df = self.df.loc[:, (self.df != 0).any(axis=0)]
+        # self.df = self.df.loc[:, (self.df != 0).any(axis=0)]
 
     def calculate_TIER(self):
         rounding_factor: float = 0.0000000001
