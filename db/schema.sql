@@ -348,3 +348,41 @@ from company c
                               and fact.value is not null
                             order by fiscal_year desc
                             limit 1) cb on true;
+
+
+-- Macro-economic history — the second data stream, and the only table in this file with no
+-- company in it. A yield spread, an unemployment rate or a CPI print is a property of the
+-- economy rather than of a filer, so there is no cik to reference and no fiscal year to hang
+-- it on: a calendar date is the whole key alongside the series name.
+--
+-- Long/narrow for exactly the reason `fact` is, and the same note at the top of this file
+-- applies: the set of series grows as questions get asked, and one column per series would
+-- need a migration every time one is added.
+--
+-- `value` is NOT NULL on purpose. FRED marks a date it holds no number for with the literal
+-- string "." (weekends and holidays on a daily series, or a month not yet published), and
+-- ingest_macro.py drops those rows at the boundary. Neither alternative survives contact
+-- with the data: a stored 0.0 silently poisons every spread and average computed over the
+-- series, and a stored NULL makes "FRED had no number" and "the number was genuinely zero"
+-- indistinguishable — and for T10Y2Y, whose whole point is the sign of the spread, zero is a
+-- real and meaningful value.
+--
+-- Keyed (series_id, date) so a re-run updates in place rather than duplicating. FRED revises
+-- published series — CPIAUCSL picks up seasonal-adjustment revisions months after first
+-- publication — so a changed value on a later run is the correct outcome, not a bug.
+--
+-- NOTE for whoever appends the next block below this one: src/db.py apply_macro_schema pulls
+-- these statements back out of this file by splitting on the semicolon and keeping the chunks
+-- that mention macro_series, so this comment block must stay semicolon-free.
+create table if not exists macro_series (
+    series_id  text not null,
+    date       date not null,
+    value      numeric not null,
+    source     text not null default 'fred',
+    updated_at timestamptz not null default now(),
+    primary key (series_id, date)
+);
+
+-- A scan across every series at once ("what did the whole macro picture look like in 2008")
+-- filters on date without a series_id, which the primary key's leading column cannot serve.
+create index if not exists macro_series_date_idx on macro_series (date);

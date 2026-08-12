@@ -6,7 +6,12 @@
 
 dashboard.py is one company the way the workbook shows it; this is every company the way a
 screener shows it. A separate page rather than a mode of that one: nothing is shared but the
-database and the four helpers in src/ui.py, and the single-company page is already 260 lines.
+database and the helpers in src/ui.py, and the single-company page is already 260 lines.
+
+The frame itself comes from ui.valuation_frame(), which pages/Opportunities.py loads too —
+this page ranks those companies one by one, that one groups the very same rows by industry,
+and two copies of the query is how the two pages would come to disagree about which
+companies exist at all.
 
 NO RATIO IS COMPUTED HERE, exactly as in dashboard.py — KGV, RoI and the Graham margin come
 out of src/metrics.py valuation() per row, from the inputs v_valuation exposes. The quality
@@ -28,49 +33,6 @@ import streamlit as st
 from src import metrics, screener, ui
 
 st.set_page_config(page_title="Screener", layout="wide")
-
-# One query. The valuation inputs come from v_valuation (which contains no formula at all)
-# and the quality metrics from the stored 7-year averages; the pivot is selection, not
-# arithmetic — metric_average's primary key is (cik, concept, window_years), so each
-# `max(value) filter` picks exactly one row.
-#
-# `exists (... fact ... source = 'edgar')` is the "has EDGAR data" test: company rows are
-# created before either source runs, so an ETF (spy, qqq) or a ticker whose filings could not
-# be parsed (sony, vale — 20-F under IFRS) sits in `company` with no facts at all. Those are
-# not companies with missing metrics, they are companies with nothing to screen on.
-ROWS = """
-    select v.ticker,
-           v.name,
-           v.sic_description,
-           v.sic_code,
-           v.price,
-           v.currency,
-           v.price_as_of,
-           v.reporting_currency,
-           v.avg_eps,
-           v.book_value_per_share,
-           v.conservative_book_value_per_share,
-           m.roa,
-           m.ebit_margin,
-           m.equity_ratio
-    from v_valuation v
-             left join (select cik,
-                               max(value) filter (where concept = 'RoA')          as roa,
-                               max(value) filter (where concept = 'EBIT-margin')  as ebit_margin,
-                               max(value) filter (where concept = 'equity-ratio') as equity_ratio
-                        from metric_average
-                        where window_years = 7
-                        group by cik) m on m.cik = v.cik
-    where exists (select 1 from fact f where f.cik = v.cik and f.source = 'edgar')
-"""
-
-# Decimal out of Postgres is object dtype in pandas, which silently disables both sorting and
-# number formatting in st.dataframe — and a screener that cannot sort is not one. Only these
-# columns: to_numeric over the whole frame would blank out the ticker and the name.
-NUMBERS = [
-    "sic_code", "price", "avg_eps", "book_value_per_share",
-    "conservative_book_value_per_share", "roa", "ebit_margin", "equity_ratio",
-]
 
 # The metrics you can filter and sort on, with the label they carry in the table.
 METRICS = {
@@ -97,17 +59,10 @@ COLUMNS = {
     **METRICS,
 }
 
-frame = ui.query(ROWS)
+frame = ui.valuation_frame()
 if frame.empty:
     st.error("No company has EDGAR facts yet. Run `python ingest.py --limit 20` first.")
     st.stop()
-
-frame[NUMBERS] = ui.numeric(frame[NUMBERS])
-
-# One rate per currency PAIR, not per company: there are seven pairs across all 221 companies
-# and fx.rate answers the 1.0 case (every US filer) before it touches the connection.
-rates = {pair: ui.fx_rate(*pair) for pair in screener.currency_pairs(frame)}
-frame = screener.add_valuation(frame, rates)
 
 st.title("Screener")
 st.caption(

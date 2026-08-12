@@ -288,3 +288,377 @@ def test_the_four_states_are_four_distinct_glyphs():
               screener.UNKNOWN]
 
     assert len(set(states)) == 4
+
+
+# ── the industry rollup ──────────────────────────────────────────────────────────────────
+
+
+def grouped(*rows) -> pd.DataFrame:
+    """(industry, Graham margin, RoI, RoA, EBIT margin, equity ratio) — what the rollup reads:
+    the signal's five columns plus the column it groups by."""
+    return pd.DataFrame(
+        list(rows),
+        columns=[screener.INDUSTRY, metrics.GRAHAM_MARGIN, metrics.RO_I,
+                 "roa", "ebit_margin", "equity_ratio"],
+    )
+
+
+STRONG = (9.0, 9.0, 14.0, 36.0)     # clears all four thresholds
+WEAK = (2.0, 3.0, 5.0, 20.0)        # clears none
+
+
+def test_the_rollup_counts_every_company_in_its_industry():
+    rows = grouped(
+        ("Software", -10.0, *STRONG),
+        ("Software", -30.0, *WEAK),
+        ("Mining", -50.0, *WEAK),
+    )
+
+    out = screener.rollup(rows, screener.signal(rows)).set_index(screener.INDUSTRY)
+
+    assert out.loc["Software", screener.COMPANIES] == 2
+    assert out.loc["Mining", screener.COMPANIES] == 1
+
+
+def test_the_rollup_reports_how_many_companies_the_median_stands_on():
+    """A median skips the rows with no Graham margin, so an industry of four where one has a
+    margin reports that ONE company as its median. Without this column the reader sees
+    "4 companies" beside it — and measured 2026-08-12 that is exactly how the artefacts came
+    to occupy the whole top of a cheapest-industries sort."""
+    rows = grouped(
+        ("Software", 500.0, *WEAK), ("Software", NAN, *WEAK),
+        ("Software", NAN, *WEAK), ("Software", NAN, *WEAK),
+    )
+
+    out = screener.rollup(rows, screener.signal(rows)).set_index(screener.INDUSTRY)
+
+    assert out.loc["Software", screener.COMPANIES] == 4
+    assert out.loc["Software", screener.RATED] == 1
+    assert out.loc["Software", metrics.GRAHAM_MARGIN] == 500.0
+
+
+def test_an_industry_where_nothing_has_a_margin_is_rated_zero():
+    """Not an error and not a 0% margin — an empty median is NaN, which renders as an empty
+    cell. "We cannot price this industry" is not "this industry is priced at zero"."""
+    rows = grouped(("Mining", NAN, *WEAK), ("Mining", NAN, *WEAK))
+
+    out = screener.rollup(rows, screener.signal(rows)).set_index(screener.INDUSTRY)
+
+    assert out.loc["Mining", screener.RATED] == 0
+    assert pd.isna(out.loc["Mining", metrics.GRAHAM_MARGIN])
+
+
+def test_the_rollup_takes_the_median_margin_not_the_mean():
+    """A negative book value per share yields a Graham number out of the square root of two
+    negatives, and margins up to 2.4e8% are really in the data (measured 2026-08-12). One
+    such row decides an industry's MEAN on its own; the median does not move."""
+    rows = grouped(
+        ("Software", -60.0, *WEAK),
+        ("Software", -40.0, *WEAK),
+        ("Software", 240_000_000.0, *WEAK),
+    )
+
+    out = screener.rollup(rows, screener.signal(rows)).set_index(screener.INDUSTRY)
+
+    assert out.loc["Software", metrics.GRAHAM_MARGIN] == -40.0
+    assert out.loc["Software", screener.QUALITY_SCORE] == 0
+
+
+def test_the_rollup_counts_the_four_signal_states_per_industry():
+    """The distribution is the point of the view: "which industry has the most green ones"
+    has to be answerable without opening the industry."""
+    rows = grouped(
+        ("Software", -10.0, *STRONG),    # cheapest quarter, 4 of 4 -> green
+        ("Software", -90.0, *WEAK),      # dearest quarter, 0 of 4  -> red
+        ("Software", -30.0, *STRONG),    # mid-priced               -> yellow
+        ("Software", NAN, *WEAK),        # no margin                -> white
+    )
+
+    out = screener.rollup(rows, screener.signal(rows)).set_index(screener.INDUSTRY)
+
+    assert out.loc["Software", screener.CHEAP_AND_STRONG] == 1
+    assert out.loc["Software", screener.RICH_AND_WEAK] == 1
+    assert out.loc["Software", screener.MIXED] == 1
+    assert out.loc["Software", screener.UNKNOWN] == 1
+
+
+def test_a_state_no_company_is_in_is_a_zero_and_not_a_missing_column():
+    """An industry with no green company has 0 green, and the page still has the column to
+    sort on. A missing column would be a KeyError on the sort, not an empty cell."""
+    rows = grouped(("Mining", -50.0, *WEAK), ("Mining", -55.0, *WEAK))
+
+    out = screener.rollup(rows, screener.signal(rows))
+
+    assert list(out.columns[-4:]) == list(screener.SIGNAL_ORDER)
+    assert out[screener.CHEAP_AND_STRONG].iloc[0] == 0
+
+
+def test_the_signal_counts_add_up_to_the_company_count():
+    """The one property a rollup must have: no company falls out of its own group. This is
+    what a dropped NaN industry key would break silently."""
+    rows = grouped(
+        ("Software", -10.0, *STRONG), ("Software", NAN, *WEAK), (None, -50.0, *WEAK),
+        ("", -90.0, *WEAK), ("   ", -20.0, *STRONG),
+    )
+
+    out = screener.rollup(rows, screener.signal(rows))
+
+    assert out[screener.COMPANIES].sum() == len(rows)
+    assert out[list(screener.SIGNAL_ORDER)].to_numpy().sum() == len(rows)
+
+
+def test_a_company_with_no_industry_is_named_rather_than_dropped():
+    """company.sic_description is nullable AND the SEC returns an empty string for some
+    filers — 48 of 5,046 in the default view, measured 2026-08-12, all of them '' and not one
+    NULL. Both spellings are one bucket with a visible name, never a blank row."""
+    rows = grouped((None, -10.0, *WEAK), ("", -20.0, *WEAK), ("  ", -30.0, *WEAK))
+
+    out = screener.rollup(rows, screener.signal(rows))
+
+    assert list(out[screener.INDUSTRY]) == [screener.UNCLASSIFIED]
+    assert out[screener.COMPANIES].iloc[0] == 3
+
+
+def test_the_rollup_is_scored_against_the_whole_screen_not_against_each_industry():
+    """The cheapness half of the signal is a quartile of the frame it is given. Recomputing
+    it per industry would make every industry look equally cheap — a quarter of its own rows
+    would always be in its own top quarter — and the view exists to compare industries."""
+    rows = grouped(
+        ("Cheap", 50.0, *STRONG), ("Cheap", 40.0, *STRONG),
+        ("Dear", -90.0, *STRONG), ("Dear", -95.0, *STRONG),
+    )
+
+    out = screener.rollup(rows, screener.signal(rows)).set_index(screener.INDUSTRY)
+
+    assert out.loc["Cheap", screener.CHEAP_AND_STRONG] == 1
+    assert out.loc["Dear", screener.CHEAP_AND_STRONG] == 0
+
+
+# ── the candidate list ───────────────────────────────────────────────────────────────────
+
+
+def test_the_candidates_are_exactly_the_green_rows():
+    """Not "cheap", not "strong" — the same bucket the glyph already names. A second
+    definition of a candidate is the drift this whole module exists to prevent."""
+    rows = grouped(
+        ("Software", -10.0, *STRONG),   # green
+        ("Software", -90.0, *WEAK),     # red
+        ("Mining", -30.0, *STRONG),     # yellow
+        ("Mining", -70.0, *WEAK),       # yellow
+    )
+    signals = screener.signal(rows)
+
+    out = screener.candidates(rows, signals)
+
+    assert len(out) == 1
+    assert list(out[screener.INDUSTRY]) == ["Software"]
+    assert (signals[out.index] == screener.CHEAP_AND_STRONG).all()
+
+
+def test_the_candidates_are_ranked_by_quality_first():
+    """Strength is the signal's own two halves made continuous, quality ahead of price:
+    blending a 0-4 count with a percentage-point distance needs a weight nobody justified."""
+    # Six rows so the top quartile holds two of them: with four the cutoff lands at 32.5 and
+    # only the single cheapest row is ever green, which cannot show an ordering at all.
+    rows = grouped(
+        ("A", 100.0, 9.0, 9.0, 14.0, 20.0),    # 3 of 4, far above the cut
+        ("B", 60.0, 9.0, 9.0, 14.0, 36.0),     # 4 of 4, less far above it
+        ("C", -90.0, *WEAK), ("D", -95.0, *WEAK),
+        ("E", -97.0, *WEAK), ("F", -99.0, *WEAK),
+    )
+
+    out = screener.candidates(rows, screener.signal(rows))
+
+    assert list(out[screener.INDUSTRY]) == ["B", "A"]
+    assert list(out[screener.QUALITY_SCORE]) == [4, 3]
+    # ...and the one that sorted second really is the one further above the cheapness bar,
+    # so this pins the priority and not merely the order.
+    assert out[screener.MARGIN_ABOVE_CUT].iloc[1] > out[screener.MARGIN_ABOVE_CUT].iloc[0]
+
+
+def test_margin_above_cut_is_the_distance_from_the_quartile_that_made_it_cheap():
+    """A distance, not a new threshold: the cutoff is margin_quartiles' own top quartile, so
+    a green row's value here is never negative."""
+    rows = grouped(
+        ("A", 100.0, *STRONG), ("B", 60.0, *STRONG),
+        ("C", -90.0, *WEAK), ("D", -95.0, *WEAK),
+        ("E", -97.0, *WEAK), ("F", -99.0, *WEAK),
+    )
+    _, cheap = screener.margin_quartiles(rows)
+
+    out = screener.candidates(rows, screener.signal(rows))
+
+    assert len(out) == 2
+    assert list(out[screener.MARGIN_ABOVE_CUT]) == pytest.approx([100.0 - cheap, 60.0 - cheap])
+    assert (out[screener.MARGIN_ABOVE_CUT] >= 0).all()
+
+
+def test_the_cheapness_cutoff_comes_from_the_whole_frame_not_from_the_survivors():
+    """Taking the quartile from the already-filtered green rows would measure them against
+    each other, and the top row's distance from the cut would collapse toward zero."""
+    rows = grouped(
+        ("A", 100.0, *STRONG), ("B", 90.0, *STRONG), ("C", 80.0, *STRONG),
+        ("D", -90.0, *WEAK), ("E", -95.0, *WEAK), ("F", -99.0, *WEAK),
+    )
+    signals = screener.signal(rows)
+
+    out = screener.candidates(rows, signals)
+    green_only = rows[signals == screener.CHEAP_AND_STRONG]
+
+    _, cut_of_all = screener.margin_quartiles(rows)
+    _, cut_of_green = screener.margin_quartiles(green_only)
+    assert cut_of_all != cut_of_green
+    assert out[screener.MARGIN_ABOVE_CUT].max() == pytest.approx(100.0 - cut_of_all)
+
+
+def test_a_filter_that_matches_nothing_still_yields_the_full_shape():
+    """Reachable from the page: the tech filter over a database with no tech company. Both
+    views have to come back empty WITH their columns — a rollup missing its glyph columns
+    would be a KeyError on the sort, not an empty table."""
+    empty = grouped()
+
+    table = screener.rollup(empty, screener.signal(empty))
+    picks = screener.candidates(empty, screener.signal(empty))
+
+    assert table.empty and picks.empty
+    assert list(table.columns[-4:]) == list(screener.SIGNAL_ORDER)
+    assert screener.RATED in table.columns
+
+
+def test_no_green_company_is_an_empty_list_and_not_an_error():
+    """A filter combination that leaves no candidate is a normal state of this page."""
+    rows = grouped(("A", -50.0, *WEAK), ("B", -60.0, *WEAK))
+
+    out = screener.candidates(rows, screener.signal(rows))
+
+    assert out.empty
+    assert screener.MARGIN_ABOVE_CUT in out.columns
+
+
+# ── the industry deep-dive ───────────────────────────────────────────────────────────────
+
+
+def facts(*rows) -> pd.DataFrame:
+    """(ticker, fiscal_year, concept, value) — the shape ui.fact_history() returns."""
+    return pd.DataFrame(
+        list(rows), columns=["ticker", screener.FISCAL_YEAR, screener.CONCEPT, screener.VALUE]
+    )
+
+
+@pytest.mark.parametrize("code, expected", [
+    (4412, "DCOILBRENTEU"),   # Deep Sea Foreign Transportation of  Freight — 30 companies
+    (4400, "DCOILBRENTEU"),   # Water Transportation, the top of the same range
+    (1531, "DGS10"),          # Operative Builders — 21 companies
+    (6021, "DGS10"),          # a bank, visible only with the financials toggle
+])
+def test_the_mapped_industries_get_their_macro_series(code, expected):
+    assert screener.macro_series_for(code) == expected
+
+
+@pytest.mark.parametrize("code", [3571, 2834, 5961, 4512, None, float("nan")])
+def test_an_unmapped_industry_gets_no_macro_series(code):
+    """Semiconductors, pharma, catalog retail, airlines — and the companies with no SIC code
+    at all. A line nobody chose invites a correlation to be read off it, so the honest
+    answer is no line."""
+    assert screener.macro_series_for(code) is None
+
+
+def test_the_mapping_is_on_the_code_because_the_sec_text_has_a_double_space():
+    """The reason this maps SIC CODES and not description substrings. The SEC really stores
+    'Deep Sea Foreign Transportation of  Freight' with two spaces (measured 2026-08-12, 39
+    companies), so `'of Freight' in description` is False and a substring mapping would
+    silently show no overlay for the one industry it was built for."""
+    stored = "Deep Sea Foreign Transportation of  Freight"
+
+    assert "Transportation of Freight" not in stored
+    assert screener.macro_series_for(4412) == "DCOILBRENTEU"
+
+
+def test_the_trend_is_a_median_per_year_and_concept():
+    rows = facts(
+        ("a", 2024, metrics.EBIT_MARGIN, 10.0),
+        ("b", 2024, metrics.EBIT_MARGIN, 20.0),
+        ("c", 2024, metrics.EBIT_MARGIN, 30.0),
+        ("a", 2023, metrics.EBIT_MARGIN, 5.0),
+        ("a", 2024, metrics.REVENUE, 1_000.0),
+    )
+
+    out = screener.median_by_year(rows).set_index([screener.FISCAL_YEAR, screener.CONCEPT])
+
+    assert out.loc[(2024, metrics.EBIT_MARGIN), screener.VALUE] == 20.0
+    assert out.loc[(2023, metrics.EBIT_MARGIN), screener.VALUE] == 5.0
+    assert out.loc[(2024, metrics.REVENUE), screener.VALUE] == 1_000.0
+
+
+def test_the_trend_takes_the_median_not_the_mean():
+    """Same reason the rollup does. One misparsed filing — a share count stored in thousands,
+    a segment total read as a consolidated one — would otherwise decide the industry's whole
+    year on its own."""
+    rows = facts(*[("x", 2024, metrics.EBIT_MARGIN, 10.0)] * 3,
+                 ("artefact", 2024, metrics.EBIT_MARGIN, 900_000.0))
+
+    out = screener.median_by_year(rows)
+
+    assert out[screener.VALUE].iloc[0] == 10.0
+
+
+def test_the_trend_carries_the_sample_size_of_every_year():
+    """The column that says whether a rising line is the industry or the sample. Measured
+    2026-08-12: the deep-sea shipping EBIT-margin median stands on 2 companies in 2017 and
+    on 24 in 2019, purely because EDGAR coverage starts where the ingest's window does."""
+    rows = facts(
+        ("a", 2017, metrics.EBIT_MARGIN, 8.0),
+        ("b", 2017, metrics.EBIT_MARGIN, 9.0),
+        *[(f"c{n}", 2019, metrics.EBIT_MARGIN, 9.0) for n in range(24)],
+    )
+
+    out = screener.median_by_year(rows).set_index(screener.FISCAL_YEAR)
+
+    assert out.loc[2017, screener.COMPANIES] == 2
+    assert out.loc[2019, screener.COMPANIES] == 24
+
+
+def test_a_company_without_the_fact_is_not_counted_as_a_zero():
+    """A missing EBIT-margin is a company that is not in the median, never a company with a
+    margin of 0 — the same rule quality_score() follows for a missing metric."""
+    rows = facts(
+        ("a", 2024, metrics.EBIT_MARGIN, 30.0),
+        ("b", 2024, metrics.EBIT_MARGIN, float("nan")),
+    )
+
+    out = screener.median_by_year(rows)
+
+    assert out[screener.VALUE].iloc[0] == 30.0
+    assert out[screener.COMPANIES].iloc[0] == 1
+
+
+def test_an_industry_with_no_stored_facts_is_an_empty_frame_and_not_an_error():
+    """Reachable: an industry whose companies were all ingested before EBIT-margin was
+    written. The page checks .empty — it must not get a KeyError first."""
+    out = screener.median_by_year(facts())
+
+    assert out.empty
+
+
+def test_the_macro_series_is_one_mean_per_calendar_year():
+    macro = pd.DataFrame({
+        "date": ["2022-01-03", "2022-07-01", "2023-01-02"],
+        screener.VALUE: [100.0, 102.0, 80.0],
+    })
+
+    out = screener.macro_mean_by_year(macro, "DCOILBRENTEU").set_index(screener.FISCAL_YEAR)
+
+    assert out.loc[2022, screener.VALUE] == 101.0
+    assert out.loc[2023, screener.VALUE] == 80.0
+
+
+def test_the_macro_frame_has_the_same_shape_the_trend_panels_draw():
+    """Same columns as median_by_year, so the overlay is drawn by the same chart code as the
+    fundamentals panels instead of a second one that could format its axis differently."""
+    macro = pd.DataFrame({"date": ["2024-01-02"], screener.VALUE: [4.21]})
+
+    out = screener.macro_mean_by_year(macro, "DGS10")
+
+    assert list(out.columns) == [screener.FISCAL_YEAR, screener.CONCEPT, screener.VALUE]
+    assert out[screener.CONCEPT].iloc[0] == "DGS10"
+    assert out[screener.FISCAL_YEAR].iloc[0] == 2024

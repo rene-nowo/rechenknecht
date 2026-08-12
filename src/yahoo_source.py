@@ -17,6 +17,7 @@ saying EBIT.
 """
 
 import logging
+import time
 
 import pandas as pd
 import yfinance as yf
@@ -171,6 +172,64 @@ def _add_dividends_per_share(
 
         paid = dividends.loc[(dividends.index > start) & (dividends.index <= end)]
         facts.loc[DIVIDENDS_PER_SHARE, fiscal_year_label(pd.Timestamp(column), fy_end_month)] = float(paid.sum())
+
+
+# The columns price_history() returns, also when it returns nothing. A caller that plots the
+# result must get the same shape whether Yahoo answered or not — an empty frame with no
+# columns raises on the first `frame["ticker"]` and takes the whole page down, which is the
+# failure this function exists to avoid in the first place.
+PRICE_COLUMNS = ["date", "ticker", "close"]
+
+
+def price_history(tickers, period: str = "2y", retries: int = 2, backoff_seconds: float = 1.0) -> pd.DataFrame:
+    """Daily closing prices for several tickers, long format (date, ticker, close).
+
+    DISPLAY ONLY — nothing here is written to the database. The facts side of this module is
+    a cross-check against filings; this is just "what has the price done lately", plotted
+    next to a valuation that was computed from filings months old.
+
+    ONE TICKER'S FAILURE IS NOT THE PAGE'S FAILURE. Every ticker is fetched inside its own
+    try, and a symbol that raises, or that Yahoo simply has no rows for, is logged and left
+    out — the remaining lines still plot. A delisted ticker, a warrant symbol Yahoo does not
+    know (`gsl-pb` is a real row in this database), or a throttled request must not blank a
+    chart of five other companies.
+
+    Retried for the same measured reason market_price_of() in ingest.py is: fast_info and
+    history() come off the same unofficial endpoint, where a single attempt was not enough —
+    one ordinary ingest run turned 19 of 21 tickers priceless and every one of them worked on
+    the next attempt. Two attempts here rather than three, because this one is in front of a
+    waiting user rather than in a batch job.
+
+    contra: N tickers are N sequential requests, ~1s each. Bounded by the caller's cap (the
+    deep-dive fetches at most a handful of candidates). If that cap is ever raised, switch to
+    the batched yf.download(tickers) — at which point per-ticker isolation has to be
+    re-established over its MultiIndex columns, which is why it is not the shape used here.
+    """
+    frames = []
+    for ticker in tickers:
+        closes = _closes(ticker, period, retries, backoff_seconds)
+        if closes is None or closes.empty:
+            logger.warning("no price history for %s — left out of the chart", ticker)
+            continue
+        frames.append(pd.DataFrame({
+            "date": pd.to_datetime(closes.index).tz_localize(None),
+            "ticker": ticker,
+            "close": closes.astype("float64").values,
+        }))
+
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=PRICE_COLUMNS)
+
+
+def _closes(ticker: str, period: str, retries: int, backoff_seconds: float):
+    """The Close column for one ticker, or None. Never raises — see price_history()."""
+    for attempt in range(retries):
+        try:
+            return yf.Ticker(ticker).history(period=period)["Close"]
+        except Exception as error:  # delisted, throttled, unknown symbol, or no Close column
+            logger.debug("no history for %s (attempt %d/%d): %s", ticker, attempt + 1, retries, error)
+            if attempt + 1 < retries:
+                time.sleep(backoff_seconds * (attempt + 1))
+    return None
 
 
 def analyze(ticker: str, market_price: float = None) -> pd.DataFrame:

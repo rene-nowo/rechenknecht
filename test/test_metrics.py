@@ -200,3 +200,86 @@ def test_valuation_accepts_the_decimals_psycopg_returns():
 
     assert ratios[metrics.GRAHAM_NUMBER] == pytest.approx(30.0)
     assert ratios[metrics.KGV] == pytest.approx(6.0)
+
+
+# ── the display-only price fetch ─────────────────────────────────────────────────────────
+
+
+class _StubHistory:
+    """Stands in for yf.Ticker in price_history(). `failing` names the tickers that behave
+    the way a delisted symbol, a warrant Yahoo does not know, or a throttled request does."""
+
+    def __init__(self, failing=(), empty=(), dates=("2026-08-10", "2026-08-11")):
+        self.failing, self.empty, self.dates = set(failing), set(empty), dates
+        self.calls = []
+
+    def __call__(self, ticker):
+        self.calls.append(ticker)
+        self.ticker = ticker
+        return self
+
+    def history(self, period="2y"):
+        if self.ticker in self.failing:
+            raise RuntimeError(f"$%^ no data found, symbol may be delisted ({self.ticker})")
+        if self.ticker in self.empty:
+            return pd.DataFrame({"Close": []}, index=pd.DatetimeIndex([]))
+        return pd.DataFrame(
+            {"Close": [10.0, 11.0]}, index=pd.DatetimeIndex(self.dates, tz="America/New_York")
+        )
+
+
+def test_price_history_returns_one_long_row_per_day_and_ticker(monkeypatch):
+    monkeypatch.setattr(yahoo_source.yf, "Ticker", _StubHistory())
+
+    prices = yahoo_source.price_history(("dac", "egle"))
+
+    assert list(prices.columns) == yahoo_source.PRICE_COLUMNS
+    assert len(prices) == 4
+    assert set(prices["ticker"]) == {"dac", "egle"}
+    # tz stripped: Altair plots a naive date, and two tickers on two exchanges would
+    # otherwise carry two offsets into one x-axis.
+    assert prices["date"].dt.tz is None
+
+
+def test_one_failing_ticker_does_not_take_the_others_down(monkeypatch):
+    """THE point of this function. gsl-pb is a real warrant-style row in this database, and a
+    chart of five other companies must not go blank because Yahoo has nothing for it."""
+    monkeypatch.setattr(yahoo_source.yf, "Ticker", _StubHistory(failing=["gsl-pb"]))
+
+    prices = yahoo_source.price_history(("dac", "gsl-pb", "egle"), retries=1)
+
+    assert set(prices["ticker"]) == {"dac", "egle"}
+    assert "gsl-pb" not in set(prices["ticker"])
+
+
+def test_a_ticker_yahoo_has_no_rows_for_is_left_out_rather_than_plotted_empty(monkeypatch):
+    """Yahoo answers for an unknown symbol with an empty frame instead of an error, so the
+    empty case has to be caught separately from the raising one."""
+    monkeypatch.setattr(yahoo_source.yf, "Ticker", _StubHistory(empty=["ctrm"]))
+
+    prices = yahoo_source.price_history(("dac", "ctrm"))
+
+    assert set(prices["ticker"]) == {"dac"}
+
+
+def test_every_ticker_failing_is_an_empty_frame_with_its_columns(monkeypatch):
+    """Yahoo down, or no network at all. The page checks .empty and then reads
+    prices["ticker"] — a frame with no columns would raise a KeyError instead."""
+    monkeypatch.setattr(yahoo_source.yf, "Ticker", _StubHistory(failing=["dac", "egle"]))
+
+    prices = yahoo_source.price_history(("dac", "egle"), retries=1)
+
+    assert prices.empty
+    assert list(prices.columns) == yahoo_source.PRICE_COLUMNS
+
+
+def test_a_failing_ticker_is_retried_before_it_is_given_up_on(monkeypatch):
+    """Same measured reason market_price_of() retries: this comes off Yahoo's unofficial
+    endpoint, where one ordinary run turned 19 of 21 tickers priceless and every one of them
+    answered on the next attempt."""
+    stub = _StubHistory(failing=["dac"])
+    monkeypatch.setattr(yahoo_source.yf, "Ticker", stub)
+
+    yahoo_source.price_history(("dac",), retries=2, backoff_seconds=0)
+
+    assert stub.calls == ["dac", "dac"]

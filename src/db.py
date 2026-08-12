@@ -51,6 +51,26 @@ def apply_schema(connection: psycopg.Connection) -> None:
     connection.commit()
 
 
+def apply_macro_schema(connection: psycopg.Connection) -> None:
+    """Create macro_series and its index — and nothing else out of schema.sql.
+
+    apply_schema() above re-runs the WHOLE file, which is right for a fresh install and wrong
+    for this one caller. Every statement in there is idempotent, but `alter table company add
+    column if not exists` and `alter table quote add column if not exists` still take an
+    ACCESS EXCLUSIVE lock on those tables even when the column already exists and the
+    statement does nothing. ingest_macro.py has to be startable while the multi-hour company
+    ingest is mid-run, and the only thing that makes running the two concurrently safe is that
+    they share no table — so this applies exactly the one table it owns.
+
+    The statements are read back out of schema.sql rather than restated here, so the table
+    keeps a single definition. That relies on the macro block in schema.sql containing no
+    semicolon outside the statements themselves, which test/test_ingest_macro.py pins.
+    """
+    statements = [s for s in SCHEMA_PATH.read_text().split(";") if "macro_series" in s]
+    connection.execute(";".join(statements) + ";")
+    connection.commit()
+
+
 def upsert_company(
     connection: psycopg.Connection,
     cik: str,
@@ -272,6 +292,42 @@ def _as_float(value) -> float:
         return float(value)
     except (TypeError, ValueError):
         return float("nan")
+
+
+def write_macro_observations(
+    connection: psycopg.Connection,
+    series_id: str,
+    observations,
+    source: str = "fred",
+) -> int:
+    """Store one macro series' (date, value) pairs. Returns rows written.
+
+    `on conflict do update` rather than `do nothing`, which is the one decision in here worth
+    stating: FRED revises published series long after the fact (CPIAUCSL picks up
+    seasonal-adjustment revisions months later), so a re-run that finds a different number for
+    a date already stored is carrying news, not a duplicate. The old value is meant to lose.
+
+    Takes the rows as plain (date, value) pairs rather than a DataFrame like write_facts —
+    there is no frame anywhere on this path. FRED serves a flat observation list and
+    ingest_macro.py parses it straight into pairs, so building one just to unpack it again
+    would be the only pandas in the chain.
+    """
+    if not observations:
+        return 0
+
+    with connection.cursor() as cursor:
+        cursor.executemany(
+            """
+            insert into macro_series (series_id, date, value, source)
+            values (%s, %s, %s, %s)
+            on conflict (series_id, date) do update
+                set value      = excluded.value,
+                    source     = excluded.source,
+                    updated_at = now()
+            """,
+            [(series_id, date, value, source) for date, value in observations],
+        )
+    return len(observations)
 
 
 def log_run(

@@ -40,6 +40,26 @@ FINANCIAL_SIC = ((6000, 6799),)
 # turn it off and use the range filters when it hides something you wanted.
 TECH_SIC = ((3570, 3579), (3600, 3699), (7370, 7379))
 
+# Which macro series the industry deep-dive overlays on an industry's own trend, and nothing
+# more than that: an industry that is not in here gets NO overlay rather than a guessed one.
+#
+# SIC CODE RANGES, never a substring of sic_description. The SEC's own text carries DOUBLE
+# spaces — measured 2026-08-12, the shipping industry is stored as 'Deep Sea Foreign
+# Transportation of  Freight' — so a substring match is one invisible character away from
+# matching nothing, and "matched nothing" is indistinguishable from "this industry has no
+# series mapped". The code is a number and cannot be misspelled. Same shape as FINANCIAL_SIC
+# and TECH_SIC above, so in_ranges() serves all three.
+#
+#   4400-4499  water transportation (4412 deep sea freight) — bunker fuel is the cost line
+#   1520-1599  building construction (1531 operative builders) — mortgage rates track the
+#              10-year yield, and mortgage rates are these companies' demand
+#   6000-6799  banks, insurers, REITs — rate-sensitive by construction (hidden by default,
+#              visible with the financials toggle)
+MACRO_BY_SIC = {
+    "DCOILBRENTEU": ((4400, 4499),),
+    "DGS10": ((1520, 1599), (6000, 6799)),
+}
+
 # KNOWN ISSUE, remove when the ADS-ratio brief ships. One ADS is not one ordinary share
 # (baba: 1 ADS = 8 ordinary shares), so the per-share figures parsed out of the filing are
 # per ORDINARY share while the price is per ADS. The currency is already handled correctly
@@ -83,6 +103,41 @@ STRONG_AT_LEAST, WEAK_AT_MOST = 3, 1
 # green-first and the unknowns land at the bottom.
 CHEAP_AND_STRONG, MIXED, RICH_AND_WEAK, UNKNOWN = "🟢", "🟡", "🔴", "⚪"
 SIGNAL = "signal"
+
+# The four in the order the rollup counts them, so a column that is empty for an industry is
+# still a 0 in the table rather than a missing column. Green first: the rollup exists to be
+# read left to right as "how many of these are worth looking at".
+SIGNAL_ORDER = (CHEAP_AND_STRONG, MIXED, RICH_AND_WEAK, UNKNOWN)
+
+# The column the rollup groups by, and the label a row gets when it has no industry text.
+#
+# Both halves are needed: company.sic_description is nullable AND the SEC's submissions API
+# returns an EMPTY STRING for some filers — measured 2026-08-12, 48 of the 5,046 companies in
+# the default view have `''` here and NOT one has NULL, so a .fillna() alone would leave 48
+# rows grouped under a nameless key that renders as a blank line in the table.
+INDUSTRY = "sic_description"
+UNCLASSIFIED = "(no industry)"
+
+# The rollup's own derived columns. Named so pages and tests share one vocabulary.
+#
+# RATED is the sample size behind the median margin, and it is NOT decoration. A median skips
+# the rows with no Graham margin, so an industry of 9 companies of which 1 has a margin
+# reports that single company's number as "the industry median" — and because the rows that
+# survive in such an industry are the broken ones, that is exactly how the artefacts float to
+# the top of a "cheapest industries" sort. Measured 2026-08-12: every one of the top 5
+# industries by median margin had 4 or fewer rated companies out of 5-21.
+COMPANIES = "companies"
+RATED = "rated"
+QUALITY_SCORE = "quality_score"
+
+# How far a row's Graham margin sits above the cheapness cutoff that made it green. A
+# DISTANCE, not a new score: the cutoff is margin_quartiles' own top quartile, so this column
+# adds no threshold that signal() does not already apply.
+MARGIN_ABOVE_CUT = "margin_above_cut"
+
+# The fact table's own column names, shared by the query in src/ui.py, the two aggregations
+# below and the deep-dive charts — so the three cannot drift apart on a rename.
+FISCAL_YEAR, CONCEPT, VALUE = "fiscal_year", "concept", "value"
 
 
 def in_ranges(code, ranges) -> bool:
@@ -244,3 +299,128 @@ def signal(frame: pd.DataFrame) -> pd.Series:
     out[(margin <= bottom) & (score <= WEAK_AT_MOST)] = RICH_AND_WEAK
     out[margin.isna() | frame[list(QUALITY_THRESHOLDS)].isna().all(axis=1)] = UNKNOWN
     return out
+
+
+def industry_label(frame: pd.DataFrame) -> pd.Series:
+    """The industry each row is grouped under, with the nameless ones named.
+
+    A missing industry is one bucket however it is spelled in the database — NULL, an empty
+    string, or whitespace. Grouping on the raw column instead would split those across a
+    dropped NaN group and a blank-labelled one, and the counts would then not add up to the
+    number of companies on the page, which is the one property a rollup has to have.
+    """
+    label = frame[INDUSTRY].fillna("").astype(str).str.strip()
+    return label.mask(label == "", UNCLASSIFIED)
+
+
+def rollup(frame: pd.DataFrame, signals: pd.Series) -> pd.DataFrame:
+    """One row per industry: how many companies, how cheap, how strong, and the signal mix.
+
+    MEDIAN, not mean, for both middle columns. The Graham margin has a long tail in BOTH
+    directions — measured 2026-08-12 over the 1,833 rows that have one, the mean is
+    +293,427% against a median of -44%, because a company with a negative book value per
+    share yields a Graham number out of a square root of two negatives and lands at up to
+    2.4e8%. One such row would decide an industry's mean on its own; the median ignores it.
+
+    `signals` is passed in rather than computed here so that it is the SAME series the page
+    shows per company — signal()'s cheapness half is a quartile OF THE FRAME IT IS GIVEN, so
+    recomputing it over a subset would silently rank an industry against itself instead of
+    against the whole screen.
+    """
+    label = industry_label(frame)
+    scored = frame.assign(**{QUALITY_SCORE: quality_score(frame)})
+    grouped = scored.groupby(label, sort=False)
+
+    counts = pd.crosstab(label, signals).reindex(columns=list(SIGNAL_ORDER), fill_value=0)
+    return pd.DataFrame({
+        COMPANIES: grouped.size(),
+        # How many of them the median margin was actually computed over. A median SKIPS the
+        # rows with no margin, so without this column an industry where one company of nine
+        # has a Graham margin reports that one company as the industry's median.
+        RATED: grouped[metrics.GRAHAM_MARGIN].count(),
+        metrics.GRAHAM_MARGIN: grouped[metrics.GRAHAM_MARGIN].median(),
+        # Over ALL companies in the group, unlike the line above: quality_score is a count of
+        # cleared thresholds and a missing metric counts as not-met, so it is never absent.
+        QUALITY_SCORE: grouped[QUALITY_SCORE].median(),
+    }).join(counts).rename_axis(INDUSTRY).reset_index()
+
+
+def candidates(frame: pd.DataFrame, signals: pd.Series) -> pd.DataFrame:
+    """Only the 🟢 rows, strongest first — the outlier list behind the green glyph.
+
+    NO NEW SCORING RULE. The bar is signal()'s own: `signals` decides membership, and the two
+    sort keys are the two halves of that same rule made continuous — how many of the four
+    QUALITY_THRESHOLDS the row clears, then how far its margin sits above the top quartile
+    that made it cheap.
+
+    Quality first and margin only as the tiebreak, deliberately: adding a percentage-point
+    distance to a 0-4 count needs a weight nobody in this codebase has ever justified, and a
+    single blended number would hide which half a company actually won on. Both columns stay
+    in the output so the order can be argued with.
+
+    `frame` must be the frame `signals` was computed over, for the same reason rollup() takes
+    the series instead of recomputing it: the cutoff is a quartile of that frame, and taking
+    it from the already-filtered green rows would measure them against each other.
+    """
+    _, cheap = margin_quartiles(frame)
+    ranked = frame.assign(**{
+        QUALITY_SCORE: quality_score(frame),
+        MARGIN_ABOVE_CUT: frame[metrics.GRAHAM_MARGIN] - cheap,
+    })
+    return ranked[signals == CHEAP_AND_STRONG].sort_values(
+        [QUALITY_SCORE, MARGIN_ABOVE_CUT], ascending=False
+    )
+
+
+def macro_series_for(sic_code):
+    """The macro series_id to overlay for an industry, or None when none is mapped.
+
+    None is a first-class answer, not a failure: the deep-dive then shows the industry's own
+    trend alone. Guessing a series for an unmapped industry would put a line on the screen
+    that means nothing and invite a correlation to be read off it.
+    """
+    for series_id, ranges in MACRO_BY_SIC.items():
+        if in_ranges(sic_code, ranges):
+            return series_id
+    return None
+
+
+def median_by_year(facts: pd.DataFrame) -> pd.DataFrame:
+    """One median per (fiscal year, concept), with the sample size it stands on beside it.
+
+    MEDIAN, for the same reason rollup() takes one: these are per-company figures with a long
+    tail, and one restated or misparsed filing would decide a year's mean on its own.
+
+    COMPANIES is not decoration here any more than RATED is in the rollup. WHICH companies
+    have a fact changes from year to year — measured 2026-08-12, the deep-sea shipping
+    median rests on 2 companies in 2017 and on 24 in 2019, because EDGAR coverage starts
+    where the ingest's filing window starts, not where the industry does. A trend line read
+    without that count is partly the sample moving rather than the industry.
+
+    Nothing is computed on the values: EBIT-margin is a STORED fact concept, the same number
+    src/metrics.py wrote at ingest time, and this only chooses which of them to show.
+    """
+    grouped = facts.groupby([FISCAL_YEAR, CONCEPT])[VALUE]
+    return pd.DataFrame({VALUE: grouped.median(), COMPANIES: grouped.count()}).reset_index()
+
+
+def macro_mean_by_year(macro: pd.DataFrame, series_id: str) -> pd.DataFrame:
+    """A daily FRED series collapsed to one point per year, in median_by_year's own shape.
+
+    Same columns on purpose, so the overlay panel is drawn by the same chart code as the
+    fundamentals panels instead of a second one that could format its axis differently.
+
+    MEAN, not median, unlike the fundamentals above: "Brent averaged $100.93 in 2022" is how
+    a price series is conventionally read for a year, and a daily oil price or Treasury yield
+    has no artefact rows of the kind a per-share figure out of a misparsed filing produces.
+
+    The year is a CALENDAR year matched against a FISCAL year label, which is an
+    approximation for every company that does not close in December — a filer with a June
+    year-end books half of calendar 2021 into its FY2022. That is why this is an overlay to
+    eyeball and why no correlation is computed anywhere from it.
+    """
+    year = pd.to_datetime(macro["date"]).dt.year
+    grouped = macro.groupby(year)[VALUE].mean()
+    return pd.DataFrame({
+        FISCAL_YEAR: grouped.index.astype(int), CONCEPT: series_id, VALUE: grouped.values,
+    })
