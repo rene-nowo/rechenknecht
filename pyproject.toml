@@ -13,6 +13,16 @@ yfinance = "^0.2.28"
 openpyxl = "^3.1.2"
 pytest = "^7.4.2"
 colorama = "^0.4.6"
+# src/db.py imports psycopg but nothing declared it, so a fresh install could not run the
+# ingest at all. [binary] because there is no local libpq build chain to rely on.
+psycopg = {extras = ["binary"], version = "^3.1"}
+# dashboard.py. Declared here rather than only installed into .venv, which is how psycopg,
+# requests and lxml each became a dependency a fresh install did not get.
+streamlit = "^1.61"
+# ingest.py's Finnhub quote lookup — src/Edgar_api.py already imports this transitively via
+# yfinance, so it was never missing, only undeclared. Closing that gap for the same reason
+# psycopg was: a fresh install must not depend on which OTHER package happens to vendor it.
+requests = "^2.31"
 
 
 [build-system]

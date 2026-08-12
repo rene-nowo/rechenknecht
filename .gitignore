@@ -3,3 +3,10 @@
 /test/logs
 dist
 user_agent.csv
+__pycache__/
+.venv/
+# Downloaded 10-K filings and the SEC companyfacts cache: both are re-fetchable from
+# data.sec.gov and grow without bound (155 MB / 58 MB after 10 companies). Anchored at the
+# root so the small, deliberately committed fixtures under /test/resources/filings stay in.
+/filings/
+/.companyfacts_cache/

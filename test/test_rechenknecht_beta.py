@@ -21,7 +21,10 @@ def test_foot_locker():
                                              index_col=0)
         expected.drop(columns=["7_YEAR_AVG"], inplace=True)
 
-        rechner = RechenknechtBeta(name, "", "USD", "fl", industry, file_list)
+        # Fixed price: FL was acquired by DKS and no longer trades, so a live lookup can never
+        # succeed. The price only feeds RoI/KGV/KBGV in the 7_YEAR_AVG column, which is dropped
+        # below — so the value is arbitrary and the filing math stays the thing under test.
+        rechner = RechenknechtBeta(name, "", "USD", "fl", industry, file_list, market_price=30.0)
         actual = rechner.df
 
         actual.to_csv(pathlib.Path(__file__).parent / "resources" / "footlocker_actual.csv")

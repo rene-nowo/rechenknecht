@@ -1,0 +1,3 @@
+- [TS-only gates](tooling_ts_only_gates.md) — contra-gate.sh/exists.sh only match .ts/.tsx/.js/.jsx/.mts/.cts; don't fault a Python app report for a fallback manual grep
+- [Uncommitted migration in git status](repo_state_uncommitted_migration.md) — rechenknecht's nested repo is dirty with an unrelated pre-existing migration diff; scope reviews by file mtime vs the report's session window, not git diff
+- [Verify Streamlit pages live](verify_streamlit_pages_live.md) — AppTest recipe to re-render pages/*.py in-process and check UI claims (column order, captions, live numbers) that the pytest suite structurally cannot cover

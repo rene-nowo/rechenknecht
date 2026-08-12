@@ -1,0 +1,4 @@
+- [Live sec-api.io key still in git history](project-secret-rotation-pending.md) — deleted from the tree 2026-08-10, verified live, rotation still owed
+- [The golden CSV is a contested artefact](project-golden-test-is-contested.md) — re-baselined 3x; never `cp actual expected`, diff cell-by-cell instead
+- [Check SEC taxonomy per accession, not aggregated](project-sec-taxonomy-check-per-accession.md) — a us-gaap section ≠ a us-gaap filing; IFRS migrants keep old facts (18 tickers → only 7 real)
+- [ADS-ratio mismatch still open](project-ads-ratio-open.md) — baba/jd/hdb/pdd ratios are ~8x wrong; screener suppresses them, dashboard.py still shows them

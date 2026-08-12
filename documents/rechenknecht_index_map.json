@@ -1,32 +1,181 @@
 {
-    "eps":[0],
-    "book_value":[1],
-    "dividends":[2, ["us-gaap:CommonStockDividendsPerShareDeclared", "us-gaap:CommonStockDividendsPerShareCashPaid"]],
-    "roa":[3],
-    "ebit_margin":[4],
-    "own_capital_quote":[5],
-    "stockholders_equity":[6, ["us-gaap:StockholdersEquity", "us-gaap:StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"]],
-    "current_assets":[7,["us-gaap:AssetsCurrent"]],
-    "current_liabilities":[8,["us-gaap:LiabilitiesCurrent"]],
-    "current_liquidities":[9],
-    "longterm_liabilities":[10, ["us-gaap:LongTermDebt", "us-gaap:LiabilitiesNoncurrent"]],
-    "total_liabilities":[99, ["us-gaap:Liabilities"]],
-    "total_equity":[11, ["us-gaap:LiabilitiesAndStockholdersEquity"]],
-    "revenue":[12,["us-gaap:Revenues"]],
-    "ebit":[13,["us-gaap:OperatingIncomeLoss", "us-gaap:IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest"]],
-    "interest_expense":[14,["us-gaap:InterestExpense", "dish:InterestExpenseNetOfAmountCapitalized"]],
-    "net_income":[15,["us-gaap:NetIncomeLoss", "us-gaap:NetIncomeLossAvailableToCommonStockholdersBasic"]],
-    "tier":[16],
-    "shares":[17, ["us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding","dei:EntityCommonStockSharesOutstanding"]],
-    "goodwill": [18, ["us-gaap:Goodwill"]],
-    "intangible_assets": [19, ["us-gaap:IntangibleAssetsNetExcludingGoodwill", "us-gaap:OtherIntangibleAssetsNet", "us-gaap:FiniteLivedIntangibleAssetsNet"]],
-    "accrued_expenses_and_accounts_payable": [20, ["us-gaap:AccountsPayableAndOtherAccruedLiabilities"]],
-    "assets": [21, ["us-gaap:Assets"]],
-    "cash" : [22, ["us-gaap:CashAndCashEquivalentsAtCarryingValue"]],
-    "accounts_receivable" : [23, ["us-gaap:AccountsReceivableNet"]],
-    "interest_income_expense": [24, ["us-gaap:InterestIncomeExpenseNonoperatingNet"]],
-    "operating_cash_flow": [25, ["us-gaap:NetCashProvidedByUsedInOperatingActivities"]],
-    "capex": [26, ["us-gaap:PaymentsToAcquirePropertyPlantAndEquipment", "us-gaap:PaymentsToAcquireProductiveAssets"]],
-    "revenue_automotive": [27, ["TODO - revenue_automotive?"]],
-    "revenue_customer": [28, ["us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax", "RevenueFromContractWithCustomerIncludingAssessedTax"]]
+ "eps": [
+  0
+ ],
+ "book_value": [
+  1
+ ],
+ "dividends": [
+  2,
+  [
+   "us-gaap:CommonStockDividendsPerShareDeclared",
+   "us-gaap:CommonStockDividendsPerShareCashPaid"
+  ]
+ ],
+ "roa": [
+  3
+ ],
+ "ebit_margin": [
+  4
+ ],
+ "own_capital_quote": [
+  5
+ ],
+ "stockholders_equity": [
+  6,
+  [
+   "us-gaap:StockholdersEquity",
+   "us-gaap:StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"
+  ]
+ ],
+ "current_assets": [
+  7,
+  [
+   "us-gaap:AssetsCurrent"
+  ]
+ ],
+ "current_liabilities": [
+  8,
+  [
+   "us-gaap:LiabilitiesCurrent"
+  ]
+ ],
+ "current_liquidities": [
+  9
+ ],
+ "longterm_liabilities": [
+  10,
+  [
+   "us-gaap:LongTermDebt",
+   "us-gaap:LiabilitiesNoncurrent"
+  ]
+ ],
+ "total_liabilities": [
+  99,
+  [
+   "us-gaap:Liabilities"
+  ]
+ ],
+ "total_equity": [
+  11,
+  [
+   "us-gaap:LiabilitiesAndStockholdersEquity"
+  ]
+ ],
+ "revenue": [
+  12,
+  [
+   "us-gaap:Revenues"
+  ]
+ ],
+ "ebit": [
+  13,
+  [
+   "us-gaap:OperatingIncomeLoss",
+   "us-gaap:IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest"
+  ]
+ ],
+ "interest_expense": [
+  14,
+  [
+   "us-gaap:InterestExpense",
+   "us-gaap:InterestExpenseNonoperating",
+   "us-gaap:InterestExpenseDebt",
+   "us-gaap:InterestExpenseBorrowings",
+   "us-gaap:InterestAndDebtExpense",
+   "dish:InterestExpenseNetOfAmountCapitalized"
+  ]
+ ],
+ "net_income": [
+  15,
+  [
+   "us-gaap:NetIncomeLoss",
+   "us-gaap:NetIncomeLossAvailableToCommonStockholdersBasic"
+  ]
+ ],
+ "tier": [
+  16
+ ],
+ "number_of_shares": [
+  17,
+  [
+   "us-gaap:WeightedAverageNumberOfSharesOutstandingBasic"
+  ]
+ ],
+ "number_of_shares_diluted": [
+  17,
+  [
+   "us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding"
+  ]
+ ],
+ "goodwill": [
+  18,
+  [
+   "us-gaap:Goodwill"
+  ]
+ ],
+ "intangible_assets": [
+  19,
+  [
+   "us-gaap:IntangibleAssetsNetExcludingGoodwill",
+   "us-gaap:OtherIntangibleAssetsNet",
+   "us-gaap:FiniteLivedIntangibleAssetsNet"
+  ]
+ ],
+ "accrued_expenses_and_accounts_payable": [
+  20,
+  [
+   "us-gaap:AccountsPayableAndOtherAccruedLiabilities"
+  ]
+ ],
+ "assets": [
+  21,
+  [
+   "us-gaap:Assets"
+  ]
+ ],
+ "cash": [
+  22,
+  [
+   "us-gaap:CashAndCashEquivalentsAtCarryingValue"
+  ]
+ ],
+ "accounts_receivable": [
+  23,
+  [
+   "us-gaap:AccountsReceivableNet"
+  ]
+ ],
+ "interest_income_expense": [
+  24,
+  [
+   "us-gaap:InterestIncomeExpenseNonoperatingNet"
+  ]
+ ],
+ "operating_cash_flow": [
+  25,
+  [
+   "us-gaap:NetCashProvidedByUsedInOperatingActivities"
+  ]
+ ],
+ "capex": [
+  26,
+  [
+   "us-gaap:PaymentsToAcquirePropertyPlantAndEquipment",
+   "us-gaap:PaymentsToAcquireProductiveAssets"
+  ]
+ ],
+ "revenue_automotive": [
+  27,
+  [
+   "TODO - revenue_automotive?"
+  ]
+ ],
+ "revenue_customer": [
+  28,
+  [
+   "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+   "RevenueFromContractWithCustomerIncludingAssessedTax"
+  ]
+ ]
 }

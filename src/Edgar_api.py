@@ -4,8 +4,22 @@ import requests
 import json
 import pandas as pd
 import os
+import shutil
 
 file_path = pathlib.Path(__file__).parent.parent / "filings"
+
+
+def discard_filings(ticker: str) -> None:
+    """Delete one ticker's downloaded filings.
+
+    Lives next to get_file(), which creates them: both entry points (ingest.py and
+    app_edgar.py) write into this directory, so both must be able to clean it through the
+    same function instead of one of them owning the delete and the other leaking ~4.2 MB
+    per filing.
+    """
+    folder = file_path / ticker.lower()
+    if folder.exists():
+        shutil.rmtree(folder)
 
 
 def generate_cik_format(cik: str):
@@ -50,7 +64,10 @@ class EDGAR_API:
             if not os.path.exists(dir_path):
                 os.makedirs(str(dir_path).lower())
 
-            self.cik = self.cik_map[1][ticker.lower()]
+            try:
+                self.cik = self.cik_map[1][ticker.lower()]
+            except KeyError:
+                raise LookupError(f"{ticker} is not in maps/ticker-cik_map.txt")
             cik = generate_cik_format(str(self.cik))
             req = requests.get(
                 "https://data.sec.gov/submissions/CIK{cik}.json".format(cik=cik),
@@ -60,7 +77,9 @@ class EDGAR_API:
             if req.status_code == 200:
                 return json.loads(req.text)
             else:
-                self.get_all_data(ticker, retries - 1)
+                # The retry result has to be returned, otherwise every recovered attempt
+                # still reports "no data" to the caller.
+                return self.get_all_data(ticker, retries - 1)
 
         return None
 
@@ -83,10 +102,12 @@ class EDGAR_API:
 
             req = requests.get(url, headers=self.headers)
 
+            # Raise instead of exit(): a batch run over many tickers must skip the company
+            # that has no XBRL instance document, not kill the whole process.
             if req.status_code != 200:
-                print(req.status_code)
-                print(req.text)
-                exit()
+                raise FileNotFoundError(
+                    f"{self.ticker}: {req.status_code} for {url}"
+                )
 
             with open(file_path_to_use, "w") as f:
                 f.writelines(req.text)
