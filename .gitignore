@@ -10,3 +10,7 @@ __pycache__/
 # root so the small, deliberately committed fixtures under /test/resources/filings stay in.
 /filings/
 /.companyfacts_cache/
+
+# Generated backtest reports (backtest_report.py). Re-derivable from the DB plus a
+# yfinance run, and the CSV is an output to read, not source to review.
+/reports/

@@ -5,7 +5,7 @@ the two rules that silently corrupt a cross-source comparison when they drift �
 fiscal year is labelled, and which sign/definition each source uses.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 
 import pandas as pd
 import pytest
@@ -212,13 +212,18 @@ class _StubHistory:
     def __init__(self, failing=(), empty=(), dates=("2026-08-10", "2026-08-11")):
         self.failing, self.empty, self.dates = set(failing), set(empty), dates
         self.calls = []
+        self.history_kwargs = None
 
     def __call__(self, ticker):
         self.calls.append(ticker)
         self.ticker = ticker
         return self
 
-    def history(self, period="2y"):
+    # **kwargs rather than period=: closes() forwards whatever the caller passes straight into
+    # .history(), so the stub has to accept a start=/end= range as well as a period and record
+    # what it actually received.
+    def history(self, **kwargs):
+        self.history_kwargs = kwargs
         if self.ticker in self.failing:
             raise RuntimeError(f"$%^ no data found, symbol may be delisted ({self.ticker})")
         if self.ticker in self.empty:
@@ -283,3 +288,72 @@ def test_a_failing_ticker_is_retried_before_it_is_given_up_on(monkeypatch):
     yahoo_source.price_history(("dac",), retries=2, backoff_seconds=0)
 
     assert stub.calls == ["dac", "dac"]
+
+
+# ── dated closes for the backtest ────────────────────────────────────────────────────────
+
+
+def closes_series(dates, values, tz=None) -> pd.Series:
+    return pd.Series(values, index=pd.DatetimeIndex(dates, tz=tz), dtype="float64")
+
+
+def test_closes_forwards_whatever_history_arguments_the_caller_passes(monkeypatch):
+    """The reason _closes() was widened instead of a second retry/backoff wrapper being
+    written: the backtest needs a start=/end= RANGE (one call covering both the cutoff and
+    today), while price_history() needs period=. One fetch helper, two call shapes."""
+    stub = _StubHistory()
+    monkeypatch.setattr(yahoo_source.yf, "Ticker", stub)
+
+    yahoo_source.closes("dac", start="2024-08-06", end="2026-08-14")
+
+    assert stub.history_kwargs == {"start": "2024-08-06", "end": "2026-08-14"}
+
+
+def test_closes_gives_up_quietly_rather_than_raising(monkeypatch):
+    """One ticker's failure is never the run's failure — 4,216 tickers are fetched in a row and
+    a delisted symbol among them must not take the report down."""
+    monkeypatch.setattr(yahoo_source.yf, "Ticker", _StubHistory(failing=["dac"]))
+
+    assert yahoo_source.closes("dac", retries=2, backoff_seconds=0, period="2y") is None
+
+
+def test_nearest_close_picks_the_closest_trading_day():
+    """A specific calendar date is often not a trading day — 2024-08-13 is, but a cutoff on a
+    weekend or a holiday simply has no row, and Yahoo does not interpolate one."""
+    series = closes_series(["2024-08-09", "2024-08-12", "2024-08-15"], [9.0, 12.0, 15.0])
+
+    price, actual = yahoo_source.nearest_close(series, date(2024, 8, 13))
+
+    assert price == pytest.approx(12.0)
+    assert actual == date(2024, 8, 12)
+
+
+def test_nearest_close_breaks_a_tie_toward_the_earlier_day():
+    """THE rule that keeps a cutoff price from being a look-ahead. Equidistant before and
+    after, the earlier day is the one that was actually knowable on the cutoff — picking the
+    later one prices the company with information from after the date being tested."""
+    series = closes_series(["2024-08-12", "2024-08-14"], [12.0, 14.0])
+
+    price, actual = yahoo_source.nearest_close(series, date(2024, 8, 13))
+
+    assert price == pytest.approx(12.0)
+    assert actual == date(2024, 8, 12)
+
+
+def test_nearest_close_handles_yahoo_s_timezone_aware_index():
+    """yfinance returns a tz-aware DatetimeIndex (price_history() already has to strip it).
+    Comparing that against a naive date silently yields wrong or zero matches rather than
+    raising, which is the worst kind of wrong."""
+    series = closes_series(["2024-08-12", "2024-08-15"], [12.0, 15.0], tz="America/New_York")
+
+    price, actual = yahoo_source.nearest_close(series, date(2024, 8, 13))
+
+    assert price == pytest.approx(12.0)
+    assert actual == date(2024, 8, 12)
+
+
+@pytest.mark.parametrize("nothing", [None, closes_series([], [])])
+def test_nearest_close_answers_nothing_for_nothing(nothing):
+    """closes() returns None when Yahoo raised and an empty Series when it simply had no rows;
+    both mean "no price", and the caller checks one thing."""
+    assert yahoo_source.nearest_close(nothing, date(2024, 8, 13)) == (None, None)

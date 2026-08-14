@@ -159,6 +159,42 @@ create table if not exists watchlist (
     note         text
 );
 
+-- The per-company detail behind a backtest run (backtest_report.py). The aggregate rollup
+-- lands in a 4-row CSV under reports/, which answers "did the signal work" but not "why did
+-- THIS company score 🟢 on that date" — and re-deriving that means re-running a two-hour
+-- fetch. So the row keeps everything the score was computed FROM: the point-in-time
+-- valuation inputs (src/backtest.py point_in_time_frame), the three ratios the screener
+-- derived, both price endpoints with the trading day each actually resolved to, and the
+-- realized forward return.
+--
+-- `signal` is the screener constant's NAME ('CHEAP_AND_STRONG', 'MIXED', 'RICH_AND_WEAK',
+-- 'UNKNOWN'), not the glyph — src/screener.py's constants ARE the emoji, and a WHERE clause
+-- against an emoji is the kind of query nobody writes twice.
+--
+-- Keyed (cik, cutoff) so a re-run of the same cutoff updates in place, exactly like quote's
+-- (cik, as_of): a second run carries fresher today-prices, not a duplicate row.
+create table if not exists backtest_result (
+    cik                                text not null references company (cik) on delete cascade,
+    cutoff                             date not null,
+    signal                             text not null,
+    avg_eps                            numeric,
+    book_value_per_share               numeric,
+    conservative_book_value_per_share  numeric,
+    roa                                numeric,
+    ebit_margin                        numeric,
+    equity_ratio                       numeric,
+    graham_margin                      numeric,
+    kgv                                numeric,
+    roi                                numeric,
+    cutoff_price                       numeric,
+    cutoff_price_as_of                 date,
+    today_price                        numeric,
+    today_price_as_of                  date,
+    forward_return                     numeric,
+    computed_at                        timestamptz not null default now(),
+    primary key (cik, cutoff)
+);
+
 
 -- Every (company, year, concept) with both sources side by side. FULL OUTER JOIN on
 -- purpose: a concept the filing parser missed entirely is the most interesting failure of

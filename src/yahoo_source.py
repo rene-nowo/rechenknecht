@@ -207,29 +207,73 @@ def price_history(tickers, period: str = "2y", retries: int = 2, backoff_seconds
     """
     frames = []
     for ticker in tickers:
-        closes = _closes(ticker, period, retries, backoff_seconds)
-        if closes is None or closes.empty:
+        series = closes(ticker, retries, backoff_seconds, period=period)
+        if series is None or series.empty:
             logger.warning("no price history for %s — left out of the chart", ticker)
             continue
         frames.append(pd.DataFrame({
-            "date": pd.to_datetime(closes.index).tz_localize(None),
+            "date": pd.to_datetime(series.index).tz_localize(None),
             "ticker": ticker,
-            "close": closes.astype("float64").values,
+            "close": series.astype("float64").values,
         }))
 
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=PRICE_COLUMNS)
 
 
-def _closes(ticker: str, period: str, retries: int, backoff_seconds: float):
-    """The Close column for one ticker, or None. Never raises — see price_history()."""
+def closes(ticker: str, retries: int = 2, backoff_seconds: float = 1.0, **history_kwargs):
+    """The Close column for one ticker, or None. Never raises — see price_history().
+
+    `history_kwargs` goes straight into yfinance's .history(): price_history() passes
+    period="2y", and backtest_report.py passes a start=/end= RANGE so that ONE call yields both
+    the cutoff close and today's close for the same ticker. Two dates, one request, across a
+    4,216-ticker pool.
+
+    Widened rather than copied. This repo already has two retry-with-backoff yfinance wrappers
+    (this one and ingest.py market_price_of), and a third would be the drift src/metrics.py's
+    own module docstring exists to prevent — the retry rule has to live in one place or a fix
+    to it reaches only some callers.
+
+    Retried for the measured reason market_price_of() is: one ordinary ingest run turned 19 of
+    21 tickers priceless and every one of them answered on the next attempt.
+    """
     for attempt in range(retries):
         try:
-            return yf.Ticker(ticker).history(period=period)["Close"]
+            return yf.Ticker(ticker).history(**history_kwargs)["Close"]
         except Exception as error:  # delisted, throttled, unknown symbol, or no Close column
             logger.debug("no history for %s (attempt %d/%d): %s", ticker, attempt + 1, retries, error)
             if attempt + 1 < retries:
                 time.sleep(backoff_seconds * (attempt + 1))
     return None
+
+
+def nearest_close(series, as_of) -> tuple:
+    """(price, actual date) for the close nearest `as_of`, or (None, None).
+
+    A specific calendar date is often not a trading day — a weekend, a holiday, or a halt —
+    and Yahoo simply has no row for it rather than interpolating one. The caller asks for the
+    date it cares about and gets back the date it actually got, so a stale answer is visible
+    rather than silently presented as the requested day's price.
+
+    A TIE RESOLVES TO THE EARLIER DAY. Equidistant before and after, only the earlier one was
+    knowable on `as_of`; picking the later would price a company at the cutoff using
+    information from after it, which is the exact look-ahead the whole backtest avoids.
+
+    The index is made tz-naive first. yfinance returns tz-aware timestamps and comparing them
+    against a naive date yields wrong or zero matches instead of raising — the same strip
+    price_history() and _add_dividends_per_share() already have to do.
+    """
+    if series is None or len(series) == 0:
+        return None, None
+
+    dates = pd.DatetimeIndex(pd.to_datetime(series.index))
+    if dates.tz is not None:
+        dates = dates.tz_localize(None)
+    dates = dates.normalize()
+
+    ranked = pd.DataFrame({"date": dates, "gap": (dates - pd.Timestamp(as_of))})
+    ranked["gap"] = ranked["gap"].abs()
+    position = ranked.sort_values(["gap", "date"]).index[0]
+    return float(series.iloc[position]), ranked["date"].iloc[position].date()
 
 
 def analyze(ticker: str, market_price: float = None) -> pd.DataFrame:

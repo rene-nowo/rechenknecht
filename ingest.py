@@ -376,10 +376,27 @@ def main() -> None:
                         print(f"    {source:6s} ok      {written} facts")
                     except Exception as error:
                         connection = safe_rollback(connection)
-                        db.log_run(connection, ticker, source, "failed", started_at, 0,
-                                   f"{type(error).__name__}: {error}")
-                        print(f"    {source:6s} FAILED  {type(error).__name__}: {str(error)[:90]}")
-                    connection.commit()
+                        # log_run itself can still be the thing that discovers the pooler
+                        # already dropped this connection (safe_rollback's rollback() can
+                        # succeed locally without proving the socket is alive) — an
+                        # exception here is not caught by this except block, and with no
+                        # outer handler it used to escape and take the whole batch down
+                        # with it. One bad ticker must skip, not crash the remaining
+                        # thousands, so this gets the same guard as every other write here.
+                        try:
+                            db.log_run(connection, ticker, source, "failed", started_at, 0,
+                                       f"{type(error).__name__}: {error}")
+                        except Exception as log_error:
+                            connection = safe_rollback(connection)
+                            print(f"    {source:6s} FAILED  {type(error).__name__}: {str(error)[:90]}"
+                                  f"  (log_run also failed, connection reset: {log_error})")
+                        else:
+                            print(f"    {source:6s} FAILED  {type(error).__name__}: {str(error)[:90]}")
+                    try:
+                        connection.commit()
+                    except Exception as commit_error:
+                        connection = safe_rollback(connection)
+                        print(f"    commit failed, connection reset: {commit_error}")
 
                 time.sleep(SEC_PAUSE_SECONDS)
             finally:

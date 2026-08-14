@@ -118,6 +118,23 @@ def write_facts(
     market price. write_metric_averages and write_quote below now persist both halves, so the
     skip here is once again a plain deduplication: everything left in the average column is a
     mean over the year columns and is genuinely derivable.
+
+    NON-FINITE VALUES ARE SKIPPED, exactly like write_metric_averages below and for the same
+    reason: an average over an empty window is NaN and a ratio over a zero denominator is
+    +/-Infinity, and neither is a measurement. This guard used to be `pd.isna(value)`, which is
+    False for infinity — so a per-share figure divided by a zero share count went into the
+    table as Postgres numeric 'Infinity'. MEASURED 2026-08-13: 3,788 such values — 1,345 across
+    494 companies on the edgar side, 2,443 across 793 on the yahoo side, mostly EBIT-margin
+    (ebit / zero revenue) on shells and SPACs.
+
+    They are not inert. Any consumer that AVERAGES raw fact rows gets an infinite average, and
+    metrics.valuation() turns that into an INFINITE Graham margin — the largest value in any
+    frame — so screener.signal() ranks the company in the top cheapness quartile. src/backtest.py
+    hit exactly that (249 companies in its eligible pool). The live Screener escapes it only
+    because write_metric_averages below already refuses the matching non-finite average, so
+    those companies end up with a NULL avg EPS and a NaN margin instead — masked by a second
+    symptom of the same bug, not by design. Four companies currently have an Infinity as their
+    LATEST book value and are one finite EPS away from being ranked cheapest on the page.
     """
     rows = []
     for column in frame.columns:
@@ -125,10 +142,10 @@ def write_facts(
         if not (len(year) == 4 and year.isdigit()):
             continue
         for concept in frame.index:
-            value = frame.loc[concept, column]
-            if pd.isna(value):
+            value = _as_float(frame.loc[concept, column])
+            if not math.isfinite(value):
                 continue
-            rows.append((cik, source, int(year), str(concept), float(value), accession))
+            rows.append((cik, source, int(year), str(concept), value, accession))
 
     if not rows:
         return 0
@@ -159,22 +176,60 @@ def write_quote(
     """Store today's price. Without this the valuation ratios cannot be recomputed from
     storage at all — they were derived at ingest time and the price then discarded.
 
+    Delegates to write_quotes below so the quote upsert SQL has exactly ONE definition —
+    the same fix-once rule that keeps the retry logic in yahoo_source.closes() instead of
+    three copies. The single-row signature stays because every existing caller (ingest.py,
+    ingest_parallel.py, backtest_report.store_cutoff_quotes) has exactly one live-fetched
+    price in hand."""
+    write_quotes(connection, cik, [(as_of or datetime.date.today(), price)], currency, source)
+
+
+def write_quotes(
+    connection: psycopg.Connection,
+    cik: str,
+    closes,
+    currency: str = "USD",
+    source: str = "yahoo",
+) -> int:
+    """Store one company's (date, price) close history in one statement. Returns rows written.
+
+    The bulk sibling write_quote was missing: backtest_report.py fetches ~500 trading days
+    per company and used to keep two of them, and writing the rest through the one-row
+    signature would be ~500 statements per company across ~4,215 companies. One executemany
+    per company instead — the exact shape write_macro_observations uses for FRED's
+    (date, value) pairs, and psycopg batches it into a handful of round trips.
+
     updated_at is bumped explicitly on conflict, not left to its column default (which only
-    fires on insert): this function is only ever called after a genuine live fetch, so every
-    call here is real news, and market_price_of()'s same-day cache check is what a caller
-    skips this function for instead."""
-    connection.execute(
-        """
-        insert into quote (cik, as_of, price, currency, source)
-        values (%s, %s, %s, %s, %s)
-        on conflict (cik, as_of) do update
-            set price      = excluded.price,
-                currency   = excluded.currency,
-                source     = excluded.source,
-                updated_at = now()
-        """,
-        (cik, as_of or datetime.date.today(), float(price), currency, source),
-    )
+    fires on insert): callers only reach this after a genuine live fetch, so every call here
+    is real news, and market_price_of()'s same-day cache check is what a caller skips this
+    function for instead.
+
+    NON-FINITE PRICES ARE SKIPPED, the same math.isfinite rule every other writer here
+    follows: Yahoo's Close column can carry NaN rows, Postgres numeric stores 'NaN' without
+    complaint, and a NaN price is not a measurement — it is the same class of poison as the
+    measured Infinity incident in `fact` (see write_facts)."""
+    rows = [
+        (cik, date, float(price), currency, source)
+        for date, price in closes
+        if math.isfinite(_as_float(price))
+    ]
+    if not rows:
+        return 0
+
+    with connection.cursor() as cursor:
+        cursor.executemany(
+            """
+            insert into quote (cik, as_of, price, currency, source)
+            values (%s, %s, %s, %s, %s)
+            on conflict (cik, as_of) do update
+                set price      = excluded.price,
+                    currency   = excluded.currency,
+                    source     = excluded.source,
+                    updated_at = now()
+            """,
+            rows,
+        )
+    return len(rows)
 
 
 def latest_quote(connection: psycopg.Connection, cik: str):
@@ -292,6 +347,51 @@ def _as_float(value) -> float:
         return float(value)
     except (TypeError, ValueError):
         return float("nan")
+
+
+def write_backtest_results(connection: psycopg.Connection, rows) -> int:
+    """Store the per-company detail of one backtest run. Returns rows written.
+
+    Takes prepared tuples in the table's column order rather than a frame: the decisions
+    about WHICH companies become rows and how a signal glyph becomes a stored name are
+    backtest vocabulary and live in backtest_report.store_backtest_results — the same split
+    write_macro_observations has with ingest_macro.py.
+
+    `on conflict do update` on (cik, cutoff): a re-run of the same cutoff carries fresher
+    today-prices and forward returns, so the old row is meant to lose — the fx/macro rule."""
+    if not rows:
+        return 0
+
+    with connection.cursor() as cursor:
+        cursor.executemany(
+            """
+            insert into backtest_result (cik, cutoff, signal, avg_eps, book_value_per_share,
+                                         conservative_book_value_per_share, roa, ebit_margin,
+                                         equity_ratio, graham_margin, kgv, roi, cutoff_price,
+                                         cutoff_price_as_of, today_price, today_price_as_of,
+                                         forward_return)
+            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            on conflict (cik, cutoff) do update
+                set signal                            = excluded.signal,
+                    avg_eps                           = excluded.avg_eps,
+                    book_value_per_share              = excluded.book_value_per_share,
+                    conservative_book_value_per_share = excluded.conservative_book_value_per_share,
+                    roa                               = excluded.roa,
+                    ebit_margin                       = excluded.ebit_margin,
+                    equity_ratio                      = excluded.equity_ratio,
+                    graham_margin                     = excluded.graham_margin,
+                    kgv                               = excluded.kgv,
+                    roi                               = excluded.roi,
+                    cutoff_price                      = excluded.cutoff_price,
+                    cutoff_price_as_of                = excluded.cutoff_price_as_of,
+                    today_price                       = excluded.today_price,
+                    today_price_as_of                 = excluded.today_price_as_of,
+                    forward_return                    = excluded.forward_return,
+                    computed_at                       = now()
+            """,
+            rows,
+        )
+    return len(rows)
 
 
 def write_macro_observations(
